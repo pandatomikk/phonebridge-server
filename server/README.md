@@ -12,6 +12,7 @@ install.sh              List, check, or install target Debian packages
 uninstall.sh            List packages and provide an explicit uninstall path
 check-system.sh         Run the v0.1 diagnostic checks
 configure-bluetooth.sh  Inspect or later configure BlueZ behavior
+pair-phone.sh           Temporary discoverable mode and Android pairing helper
 configure-pipewire.sh   Inspect or later configure PipeWire/WirePlumber behavior
 configure-ofono.sh      Inspect or later configure oFono behavior
 ```
@@ -35,6 +36,8 @@ well understood.
 ./server/install.sh --check
 sudo ./server/install.sh --install
 ./server/configure-bluetooth.sh --check
+./server/pair-phone.sh --check
+./server/pair-phone.sh --discoverable
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
 ./scripts/logs.sh --since "10 min ago" --lines 120

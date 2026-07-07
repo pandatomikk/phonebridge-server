@@ -77,12 +77,32 @@ Useful diagnostic commands:
 ./server/configure-bluetooth.sh --check
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
+./server/pair-phone.sh --check
 ./scripts/debug.sh
 ./scripts/logs.sh --since "10 min ago" --lines 120
 ```
 
 `--apply` modes only perform conservative service-start or temporary pairing-window actions. They
 do not write active HFP audio routing and do not install network streaming.
+
+## Bluetooth Pairing Phase
+
+The active development phase prepares Bluetooth pairing and HFP discovery only. The intended test is:
+
+```text
+Android Settings -> Bluetooth -> PhoneBridge -> Connected for Calls
+```
+
+Procedure:
+
+```bash
+sudo ./server/install.sh --install
+./server/check-system.sh
+sudo ./server/configure-bluetooth.sh --apply
+./server/pair-phone.sh --discoverable
+```
+
+See [Bluetooth pairing procedure](docs/pairing.md).
 
 ## Roadmap
 
@@ -99,6 +119,7 @@ do not write active HFP audio routing and do not install network streaming.
 - [Architecture](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Bluetooth notes](docs/bluetooth.md)
+- [Bluetooth pairing procedure](docs/pairing.md)
 - [Audio notes](docs/audio.md)
 - [Research notes](docs/research/decision-log.md)
 - [Server scripts](server/README.md)

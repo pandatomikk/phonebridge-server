@@ -22,12 +22,14 @@
 - Add controlled discoverable/pairable mode.
 - Document Android pairing flow.
 - Avoid leaving the device discoverable indefinitely.
+- Verify Android can discover and pair with alias `PhoneBridge`.
 
 ## v0.4 Android Sees Server as Hands-Free Device
 
 - Validate advertised Bluetooth roles.
 - Confirm Android sees PhoneBridge as call-audio capable.
 - Capture required BlueZ and oFono state.
+- Document unresolved blocker if Android pairs but does not show call support.
 
 ## v0.5 Local Bidirectional HFP Audio
 

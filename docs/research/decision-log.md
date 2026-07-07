@@ -135,3 +135,27 @@ Recommended next research validation:
 - Real Android pairing with captured BlueZ UUID/profile state.
 - Real call with `wpctl status`, `pw-cli ls Node`, and oFono D-Bus capture.
 - Reboot persistence test for Bluetooth service and PipeWire user service.
+
+## Pairing and HFP Discovery Phase
+
+Status: accepted for the current development phase.
+
+Facts:
+
+- BlueZ can manage adapter state, discovery, pairing, and D-Bus device objects.
+- HFP Hands-Free versus Audio Gateway role selection remains separate from basic pairing.
+- Android is expected to act as Audio Gateway; PhoneBridge must appear as Hands-Free.
+
+Uncertainty:
+
+- Basic BlueZ pairing may not be enough for Android to show "Connected for Calls".
+- The required HFP Hands-Free advertisement may depend on PipeWire/WirePlumber native backend,
+  oFono, or a later explicit profile/backend configuration.
+
+Decision:
+
+- Implement only safe pairing preparation now.
+- Do not edit `bluetoothd.conf` automatically.
+- Do not force HFP roles until real Raspberry Pi traces show the missing piece.
+- If Android cannot see call support, document the observed BlueZ UUIDs, D-Bus objects, backend
+  state, and Android UI behavior before implementing changes.
