@@ -79,6 +79,19 @@ Decision:
 - Fallback research item: HSP Headset (`hsp_hs`)
 - Not primary: A2DP
 
+## Risks
+
+- Android vendors may label the same pairing differently while still using HFP.
+- Android may expose VoIP call audio differently from GSM call audio.
+- Selecting HFP AG on the Raspberry Pi would invert the intended role and likely fail.
+
+## Points to Test on Real Raspberry Pi
+
+- Confirm Android UI identifies the Pi as call-audio capable.
+- Confirm Android routes GSM call audio over Bluetooth HFP.
+- Confirm at least one VoIP app routes call audio over Bluetooth HFP.
+- Capture whether HSP is ever selected or needed as fallback.
+
 ## Sources
 
 - BlueZ Profile API: https://bluez.readthedocs.io/en/latest/profile-api/

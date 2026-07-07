@@ -69,6 +69,24 @@ Working assumptions for PhoneBridge:
 - PhoneBridge should first rely on the distribution PipeWire/WirePlumber/BlueZ/oFono integration
   before writing a custom BlueZ Profile1 implementation.
 
+## Risks
+
+- The user PipeWire session may not exist on a headless Raspberry Pi.
+- Android may expose different HFP behavior for GSM and VoIP calls.
+- The BlueZ/PipeWire/WirePlumber HFP backend may differ between Debian 13 and Raspberry Pi OS.
+
+## Decisions
+
+- Use modern BlueZ, PipeWire, WirePlumber, oFono, and D-Bus as the target architecture.
+- Keep v0.1/v0.2 limited to diagnostics, installation, pairing preparation, and documentation.
+- Do not implement custom HFP role logic until real-device traces prove what is needed.
+
+## Tests on Real Raspberry Pi
+
+- Confirm `bluetoothctl show` exposes an adapter and stable controller state.
+- Confirm a PipeWire user session exists after reboot without a desktop login.
+- Pair Android and capture BlueZ, WirePlumber, PipeWire, and oFono state before and during a call.
+
 ## Sources
 
 - BlueZ Adapter API: https://bluez.readthedocs.io/en/latest/adapter-api/

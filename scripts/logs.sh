@@ -3,14 +3,16 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 SINCE="10 min ago"
+LINES=120
 FOLLOW=false
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--since TIME] [--follow] [--help]
+Usage: $SCRIPT_NAME [--since TIME] [--lines N] [--follow] [--help]
 
 Options:
   --since TIME  journalctl time expression. Default: "$SINCE"
+  --lines N     Maximum lines per journal section before follow mode. Default: $LINES
   --follow      Follow logs after printing existing entries.
   --help        Show this help.
 
@@ -29,7 +31,7 @@ section() {
 }
 
 journal_args() {
-  local args=(--since "$SINCE" --no-pager -q)
+  local args=(--since "$SINCE" -n "$LINES" --no-pager -q)
   if [[ "$FOLLOW" == true ]]; then
     args+=(--follow)
   fi
@@ -92,6 +94,14 @@ main() {
       --follow)
         FOLLOW=true
         shift
+        ;;
+      --lines)
+        if [[ -z "${2:-}" || ! "$2" =~ ^[0-9]+$ ]]; then
+          printf '--lines requires a positive integer\n' >&2
+          return 2
+        fi
+        LINES="$2"
+        shift 2
         ;;
       -h | --help)
         usage

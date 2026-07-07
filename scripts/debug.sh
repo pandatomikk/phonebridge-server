@@ -41,6 +41,15 @@ run_section() {
   "$@" 2>&1 || printf 'WARNING command failed: %s\n' "$*"
 }
 
+recommendations() {
+  section "Recommendations"
+  printf 'INFO run ./server/install.sh --check to review missing packages\n'
+  printf 'INFO run ./server/check-system.sh after installing dependencies on the Raspberry Pi\n'
+  printf 'INFO use ./server/configure-bluetooth.sh --check before any pairing attempt\n'
+  printf 'INFO do not force HFP/HSP roles until Android pairing behavior is captured on real hardware\n'
+  printf 'INFO document uncertain behavior in docs/research/decision-log.md before implementation\n'
+}
+
 service_state() {
   local service_name="$1"
   if have_command systemctl; then
@@ -125,6 +134,8 @@ main() {
     run_section "local network addresses" ip -brief addr
     run_section "local routes" ip route
   fi
+
+  recommendations
 }
 
 main "$@"

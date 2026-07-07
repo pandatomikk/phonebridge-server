@@ -81,6 +81,35 @@ Important limitation:
 - PipeWire must receive usable audio nodes.
 - The SCO path must be established during a call or test audio state.
 
+## Facts, Assumptions, Risks, Decisions
+
+Facts:
+
+- PipeWire can expose audio sources/sinks as graph nodes.
+- PipeWire has loopback and filter-chain modules for later virtual endpoint work.
+- WirePlumber policy determines much of the practical Bluetooth routing behavior.
+
+Assumptions:
+
+- HFP audio will appear as PipeWire nodes only after the Bluetooth backend establishes SCO/eSCO.
+- Stable virtual nodes should be added only after local HFP audio is proven.
+
+Risks:
+
+- A headless system may not have a running user PipeWire session.
+- `wpctl status` may show no Bluetooth nodes until a real call activates HFP audio.
+
+Decisions:
+
+- v0.1/v0.2 should inspect PipeWire and WirePlumber, not create active audio routing.
+- Network transport is deferred until stable local nodes exist.
+
+Tests on real Raspberry Pi:
+
+- Run `wpctl status` before pairing, after pairing, and during a call.
+- Record `pw-cli ls Node` while Android call audio is active.
+- Test whether `pipewire-pulse` is needed only for compatibility tools, not core routing.
+
 ## Sources
 
 - WirePlumber Bluetooth configuration: https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/bluetooth.html

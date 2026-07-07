@@ -116,3 +116,22 @@ Recommended next research validation:
 4. Compare WirePlumber `native` vs `ofono` backend on Debian 13 and Raspberry Pi OS Bookworm.
 5. Only after successful HFP HF audio appears in PipeWire, design stable virtual nodes for local
    and future network exposure.
+
+## Open Assumptions to Validate
+
+- Android will consistently treat the Raspberry Pi as HFP Hands-Free when only standard stack
+  components are enabled.
+- WirePlumber's `native` backend may be sufficient, but `ofono` remains in scope until tested.
+- A headless Pi can maintain the required user PipeWire session without a graphical login.
+
+## Risks Accepted for v0.1/v0.2
+
+- Diagnostics may report warnings on non-Pi development machines.
+- The repository may document backend options that are not all active on the target distro.
+- No script proves call audio works yet; that belongs to v0.5.
+
+## Tests Required Before HFP Audio Implementation
+
+- Real Android pairing with captured BlueZ UUID/profile state.
+- Real call with `wpctl status`, `pw-cli ls Node`, and oFono D-Bus capture.
+- Reboot persistence test for Bluetooth service and PipeWire user service.

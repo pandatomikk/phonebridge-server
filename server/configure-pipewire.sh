@@ -13,12 +13,13 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--apply|--help]
+Usage: $SCRIPT_NAME [--check|--apply|--yes|--help]
 
 Modes:
   --check   Inspect PipeWire/WirePlumber state. No system changes. Default.
   --apply   Enable/start user PipeWire services where possible and create a disabled
             project notes directory at $PROJECT_CONFIG_LABEL.
+  --yes     Skip the interactive confirmation required by --apply.
   --help    Show this help.
 
 This script does not overwrite PipeWire or WirePlumber configuration.
@@ -41,6 +42,21 @@ run_or_warn() {
   else
     warning "$description failed"
   fi
+}
+
+confirm_apply() {
+  local assume_yes="$1"
+  if [[ "$assume_yes" == "true" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    error "--apply requires an interactive confirmation; re-run with --yes if intentional"
+    return 1
+  fi
+  printf 'This will start/enable user PipeWire services and create disabled project notes. Continue? [y/N] '
+  local answer
+  read -r answer
+  [[ "$answer" == "y" || "$answer" == "Y" || "$answer" == "yes" || "$answer" == "YES" ]]
 }
 
 show_nodes() {
@@ -107,7 +123,9 @@ check_pipewire() {
 }
 
 apply_pipewire() {
+  local assume_yes="$1"
   section "PipeWire apply"
+  confirm_apply "$assume_yes"
 
   if have_command systemctl && user_bus_available; then
     run_or_warn "enabled user pipewire.service" systemctl --user enable pipewire.service
@@ -139,23 +157,31 @@ EOF
 
 main() {
   local mode="--check"
-  case "${1:---check}" in
-    --check | --apply)
-      mode="$1"
-      ;;
-    -h | --help)
-      usage
-      return 0
-      ;;
-    *)
-      error "unknown option: $1"
-      usage >&2
-      return 2
-      ;;
-  esac
+  local assume_yes=false
+  while (($# > 0)); do
+    case "$1" in
+      --check | --apply)
+        mode="$1"
+        shift
+        ;;
+      --yes)
+        assume_yes=true
+        shift
+        ;;
+      -h | --help)
+        usage
+        return 0
+        ;;
+      *)
+        error "unknown option: $1"
+        usage >&2
+        return 2
+        ;;
+    esac
+  done
 
   if [[ "$mode" == "--apply" ]]; then
-    apply_pipewire
+    apply_pipewire "$assume_yes"
   else
     check_pipewire
   fi

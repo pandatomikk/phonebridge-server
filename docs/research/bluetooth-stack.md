@@ -133,6 +133,35 @@ Maintained HFP implementation candidates:
 
 PhoneBridge should test these maintained distribution paths before considering a custom daemon.
 
+## Facts, Assumptions, Risks, Decisions
+
+Facts:
+
+- BlueZ owns pairing, adapters, devices, profiles, and media transports.
+- D-Bus is the control plane for BlueZ and oFono.
+- WirePlumber documents selectable Bluetooth HFP/HSP backends.
+
+Assumptions:
+
+- Distribution-provided BlueZ/WirePlumber/PipeWire integration is the safest first target.
+- Android should be tested as HFP Audio Gateway against a Raspberry Pi HFP Hands-Free role.
+
+Risks:
+
+- HFP backend defaults may differ by distro or package version.
+- Bluetooth controllers may expose inconsistent SCO/eSCO behavior.
+
+Decisions:
+
+- Do not write a custom BlueZ profile daemon in v0.1/v0.2.
+- Diagnose stack state before changing Bluetooth configuration.
+
+Tests on real Raspberry Pi:
+
+- Compare onboard Bluetooth and a known-good USB Bluetooth adapter.
+- Capture `btmon` traces for pairing and call setup.
+- Record active WirePlumber HFP/HSP backend behavior.
+
 ## Sources
 
 - Debian BlueZ package: https://packages.debian.org/trixie/bluez

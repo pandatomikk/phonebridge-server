@@ -100,3 +100,17 @@ Mitigation: v0.1 diagnostics should record package versions and effective config
 - PipeWire loopback module: https://docs.pipewire.org/page_module_loopback.html
 - oFono Handsfree Audio API: https://git.kernel.org/pub/scm/network/ofono/ofono.git/plain/doc/handsfree-audio-api.txt
 - Debian package metadata: https://packages.debian.org/trixie/
+
+## Decisions
+
+- Treat all audio-routing behavior as unverified until tested on real Raspberry Pi hardware.
+- Keep v0.1/v0.2 scripts diagnostic and conservative.
+- Do not translate PulseAudio-era commands directly into active configuration.
+
+## Points to Test on Real Raspberry Pi
+
+- Pairing reliability over several reboots.
+- SCO/eSCO audio activation during real calls.
+- PipeWire node stability and naming.
+- Onboard Bluetooth versus USB adapter behavior.
+- Headless user-session startup for PipeWire and WirePlumber.

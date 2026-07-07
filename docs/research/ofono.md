@@ -66,6 +66,23 @@ Recommendation:
 - v0.2/v0.3 should test both `native` and `ofono` on real Debian 13 and Raspberry Pi OS Bookworm
   before committing to one backend.
 
+## Risks
+
+- oFono may be installed but expose no useful HFP objects until Android is paired and connected.
+- PipeWire native backend may make oFono unnecessary on some systems.
+- oFono service state alone does not prove SCO audio will work.
+
+## Decisions
+
+- Keep oFono in the dependency and diagnostic baseline.
+- Do not implement oFono-specific audio acquisition until backend behavior is validated.
+
+## Tests on Real Raspberry Pi
+
+- Inspect `busctl --system tree org.ofono` before pairing, after pairing, and during a call.
+- Check whether HandsfreeAudioCard objects appear for Android.
+- Compare call answer/hangup visibility between GSM and VoIP calls.
+
 ## Sources
 
 - oFono project: https://git.kernel.org/pub/scm/network/ofono/ofono.git/about/

@@ -25,6 +25,8 @@ The v0.1 `--apply` path is intentionally limited and mostly reports what is not 
 This keeps the project from enabling unsafe Bluetooth behavior before the required settings are
 well understood.
 
+`--apply` commands require confirmation. Use `--yes` only for deliberate automation.
+
 ## Common Commands
 
 ```bash
@@ -35,4 +37,5 @@ sudo ./server/install.sh --install
 ./server/configure-bluetooth.sh --check
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
+./scripts/logs.sh --since "10 min ago" --lines 120
 ```

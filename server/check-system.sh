@@ -165,8 +165,12 @@ check_os() {
 
 check_system_services() {
   section "System services and D-Bus"
+  command_check uname coreutils error
+  command_check journalctl systemd warning
   command_check systemctl systemd error
   command_check busctl systemd error
+  command_check lsusb usbutils warning
+  command_check lspci pciutils warning
 
   if systemd_available; then
     ok "systemd is available"
@@ -192,13 +196,56 @@ check_user() {
   info "user: $(id -un) ($(id -u))"
   info "groups: $(id -nG)"
 
-  for group_name in audio bluetooth plugdev; do
+  for group_name in audio bluetooth pulse pipewire plugdev; do
     if id -nG | tr ' ' '\n' | grep -qx "$group_name"; then
       ok "user is in '$group_name' group"
     else
-      warning "user is not in '$group_name' group"
+      if getent group "$group_name" >/dev/null 2>&1; then
+        warning "user is not in existing '$group_name' group"
+      else
+        info "group '$group_name' does not exist on this system"
+      fi
     fi
   done
+}
+
+check_bluetooth_hardware() {
+  section "Bluetooth hardware"
+
+  local found=0
+  if have_command lsusb; then
+    info "USB Bluetooth candidates:"
+    if lsusb 2>/dev/null | grep -Ei 'bluetooth|wireless|radio|csr|broadcom|realtek|intel' | sed 's/^/INFO    /'; then
+      found=1
+    else
+      warning "no obvious USB Bluetooth adapter found in lsusb"
+    fi
+  else
+    warning "lsusb is missing"
+  fi
+
+  if have_command lspci; then
+    info "PCI Bluetooth/wireless candidates:"
+    if lspci 2>/dev/null | grep -Ei 'bluetooth|wireless|wi-fi|wlan|802\.11' | sed 's/^/INFO    /'; then
+      found=1
+    else
+      warning "no obvious PCI Bluetooth/wireless adapter found in lspci"
+    fi
+  else
+    warning "lspci is missing"
+  fi
+
+  if [[ -d /sys/class/bluetooth ]] && find /sys/class/bluetooth -mindepth 1 -maxdepth 1 2>/dev/null | grep -q .; then
+    ok "kernel exposes Bluetooth devices under /sys/class/bluetooth"
+    find /sys/class/bluetooth -mindepth 1 -maxdepth 1 -exec basename {} \; 2>/dev/null | sed 's/^/INFO    /' || true
+    found=1
+  else
+    warning "no Bluetooth devices exposed under /sys/class/bluetooth"
+  fi
+
+  if ((found == 0)); then
+    error "no Bluetooth adapter evidence found"
+  fi
 }
 
 check_bluetooth() {
@@ -380,6 +427,7 @@ main() {
   check_os
   check_system_services
   check_user
+  check_bluetooth_hardware
   check_bluetooth
   check_pipewire
   check_wireplumber

@@ -7,6 +7,7 @@ readonly REQUIRED_PACKAGES=(
   bluez
   bluetooth
   pipewire
+  pipewire-bin
   pipewire-pulse
   wireplumber
   ofono
@@ -32,7 +33,7 @@ Usage: $SCRIPT_NAME [--list|--check|--install|--yes|--help]
 
 Options:
   --list     List planned packages. No system changes.
-  --check    Show missing required and optional packages. No system changes.
+  --check    Show installed and missing packages. No system changes.
   --install  Install missing required packages with apt-get. Requires root.
   --yes      Allow --install on a non-target Debian-family OS.
   --help     Show this help.
@@ -75,6 +76,21 @@ supported_os() {
   esac
 }
 
+describe_os() {
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    info "detected OS: ${PRETTY_NAME:-unknown} (${ID:-unknown}/${VERSION_CODENAME:-unknown})"
+    if supported_os; then
+      ok "OS is in the PhoneBridge target family"
+    else
+      warning "OS is outside the primary target list: Raspberry Pi OS Bookworm or Debian 13+"
+    fi
+  else
+    warning "/etc/os-release is not readable"
+  fi
+}
+
 ensure_apt() {
   if ! have_command apt-get || ! have_command apt-cache || ! have_command dpkg-query; then
     error "apt-get, apt-cache, and dpkg-query are required; this installer targets Debian/Raspberry Pi OS"
@@ -111,6 +127,17 @@ available_optional_packages() {
 
 check_packages() {
   ensure_apt
+  describe_os
+  local package_name
+  info "required package status:"
+  for package_name in "${REQUIRED_PACKAGES[@]}"; do
+    if package_installed "$package_name"; then
+      ok "$package_name installed"
+    else
+      warning "$package_name missing"
+    fi
+  done
+
   local missing
   missing="$(missing_required_packages)"
   if [[ -z "$missing" ]]; then
@@ -121,7 +148,15 @@ check_packages() {
   fi
 
   info "optional package availability:"
-  available_optional_packages | sed 's/^/  available: /'
+  for package_name in "${OPTIONAL_PACKAGES[@]}"; do
+    if package_installed "$package_name"; then
+      ok "$package_name installed"
+    elif package_available "$package_name"; then
+      warning "$package_name available but not installed"
+    else
+      warning "$package_name not available from current apt sources"
+    fi
+  done
 }
 
 install_packages() {
@@ -129,6 +164,7 @@ install_packages() {
   require_root
 
   local allow_unsupported="$1"
+  describe_os
   if ! supported_os && [[ "$allow_unsupported" != "true" ]]; then
     error "unsupported OS target; use --yes with --install only if you accept this risk"
     return 1

@@ -71,6 +71,19 @@ sudo ./server/install.sh --install
 The configuration scripts are conservative. They inspect the system by default and require an
 explicit `--apply` flag before making supported changes.
 
+Useful diagnostic commands:
+
+```bash
+./server/configure-bluetooth.sh --check
+./server/configure-pipewire.sh --check
+./server/configure-ofono.sh --check
+./scripts/debug.sh
+./scripts/logs.sh --since "10 min ago" --lines 120
+```
+
+`--apply` modes only perform conservative service-start or temporary pairing-window actions. They
+do not write active HFP audio routing and do not install network streaming.
+
 ## Roadmap
 
 - v0.1 diagnostic foundation

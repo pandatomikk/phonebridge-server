@@ -50,6 +50,23 @@ PhoneBridge v0.1 diagnostics should report:
 - effective Bluetooth roles/backend when this can be discovered
 - PipeWire nodes exposed during Android pairing and during a real call
 
+## Risks
+
+- Documentation may describe upstream defaults while the target distro ships patched defaults.
+- Selecting `ofono` or `native` prematurely may hide the backend that actually works on the Pi.
+- Policy changes can affect all Bluetooth audio devices for the user session.
+
+## Decisions
+
+- v0.1/v0.2 must not force `bluez5.roles` or `bluez5.hfphsp-backend`.
+- Backend choice remains a documented decision pending real-device traces.
+
+## Tests on Real Raspberry Pi
+
+- Locate effective WirePlumber configuration paths.
+- Compare `native` and `ofono` backend behavior only in a controlled later test.
+- Confirm whether HFP HF appears to Android without custom WirePlumber snippets.
+
 ## Sources
 
 - WirePlumber Bluetooth configuration: https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/bluetooth.html
