@@ -1,0 +1,20 @@
+# Runtime output
+*.log
+*.tmp
+tmp/
+out/
+dist/
+
+# Local diagnostics
+phonebridge-debug-*.txt
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local environment
+.env
+.env.*
+!.env.example

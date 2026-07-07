@@ -47,6 +47,9 @@ The first supported systems are:
 - BlueZ as the Bluetooth stack
 - oFono for HFP/HSP integration
 
+PhoneBridge should use the HFP Hands-Free role. Android is expected to act as the HFP Audio Gateway
+because it owns GSM and VoIP call state.
+
 ## Design Principles
 
 - Prefer current PipeWire and WirePlumber behavior over PulseAudio compatibility paths.
@@ -54,6 +57,7 @@ The first supported systems are:
 - Make diagnostics useful before attempting automation.
 - Avoid enabling insecure Bluetooth behavior automatically.
 - Keep every script runnable on its own.
+- Do not make permanent Bluetooth security changes without explicit confirmation.
 
 ## Future Audio Network Layer
 

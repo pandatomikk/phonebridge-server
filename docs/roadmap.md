@@ -11,24 +11,25 @@
 - Check oFono service and tools.
 - Produce readable logs and diagnostics.
 
-## v0.2 BlueZ Configuration
+## v0.2 Clean Installation
 
-- Document required BlueZ options for HFP/HSP experiments.
-- Add guarded configuration helpers.
-- Keep all configuration changes explicit.
-- Preserve backups before modifying system files.
+- Harden dependency detection.
+- Install required packages without changing configuration files.
+- Report unsupported platforms clearly.
 
-## v0.3 Raspberry Pi Discoverable
+## v0.3 Bluetooth Pairing
 
-- Add a controlled discoverable/pairable mode helper.
-- Document how long discoverable mode should remain active.
-- Avoid leaving the device discoverable indefinitely by default.
+- Add controlled discoverable/pairable mode.
+- Document Android pairing flow.
+- Avoid leaving the device discoverable indefinitely.
+- Verify Android can discover and pair with alias `PhoneBridge`.
 
-## v0.4 Android Sees Raspberry Pi as Hands-Free Device
+## v0.4 Android Sees Server as Hands-Free Device
 
 - Validate advertised Bluetooth roles.
-- Document Android pairing flow.
+- Confirm Android sees PhoneBridge as call-audio capable.
 - Capture required BlueZ and oFono state.
+- Document unresolved blocker if Android pairs but does not show call support.
 
 ## v0.5 Local Bidirectional HFP Audio
 
@@ -42,9 +43,9 @@
 - Document routing controls and policy interactions.
 - Prepare repeatable debug captures.
 
-## v0.7 Network Audio Preparation
+## v0.7 Network Audio Transport Preparation
 
-- Define transport requirements.
+- Define network transport requirements.
 - Compare viable Linux audio network approaches.
 - Prepare interfaces for a later network streaming implementation.
 

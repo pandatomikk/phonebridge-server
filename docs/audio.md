@@ -9,6 +9,13 @@ PhoneBridge Server targets PipeWire and WirePlumber as the local Linux audio sta
 - oFono participates in HFP/HSP integration.
 - BlueZ exposes Bluetooth audio devices and profile state.
 
+Expected call-audio direction:
+
+```text
+Android call downlink -> Bluetooth SCO/eSCO -> BlueZ/HFP backend -> PipeWire node -> local app
+Linux microphone/source -> PipeWire node -> BlueZ/HFP backend -> Bluetooth SCO/eSCO -> Android uplink
+```
+
 ## PulseAudio
 
 PulseAudio documentation may be useful as historical context, especially for older HFP/HSP
@@ -24,6 +31,9 @@ The diagnostic scripts check:
 - user-level `wireplumber.service`
 - `wpctl status` when available
 - `ofonod` and `ofono.service`
+
+Future versions may create stable PipeWire virtual sources/sinks, but v0.1 does not install active
+audio routing.
 
 ## Open Questions
 

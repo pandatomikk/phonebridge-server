@@ -1,7 +1,8 @@
 # PhoneBridge Server
 
-PhoneBridge Server is a Linux service project for Raspberry Pi OS Bookworm and Debian 13+.
-Its goal is to turn a small Linux machine into a Bluetooth audio gateway for an Android phone.
+PhoneBridge Server is an experimental Linux service project for Raspberry Pi OS Bookworm and
+Debian 13+. Its goal is to turn a small Linux machine into a Bluetooth call-audio gateway for an
+Android phone.
 
 The project is intentionally audio-only. It does not replace scrcpy or KDE Connect, and it does
 not handle screen sharing, notifications, SMS, file sync, or phone control.
@@ -17,8 +18,9 @@ Android Phone
   -> later: network audio transport to a Linux PC
 ```
 
-The main implementation targets a modern PipeWire and WirePlumber stack. PulseAudio-era
-documentation can be useful background, but PulseAudio is not the primary implementation target.
+The main implementation targets a modern BlueZ, PipeWire, WirePlumber, and oFono stack.
+PulseAudio-era documentation can be useful historical background, but PulseAudio is not the primary
+implementation target.
 
 ## Current Scope
 
@@ -33,7 +35,8 @@ Version 0.1 is a clean repository skeleton and system diagnostic baseline:
 - produce readable diagnostics
 - document the next implementation steps
 
-Network audio streaming is explicitly out of scope for this initial version.
+Network audio streaming is explicitly out of scope for this initial version. v0.1 does not yet
+make Android route call audio through the server; it prepares diagnostics and guarded setup helpers.
 
 ## Repository Layout
 
@@ -56,6 +59,7 @@ List packages required by the target stack:
 
 ```bash
 ./server/install.sh --list
+./server/install.sh --check
 ```
 
 Install packages on Debian/Raspberry Pi OS:
@@ -67,11 +71,56 @@ sudo ./server/install.sh --install
 The configuration scripts are conservative. They inspect the system by default and require an
 explicit `--apply` flag before making supported changes.
 
+Useful diagnostic commands:
+
+```bash
+./server/configure-bluetooth.sh --check
+./server/configure-pipewire.sh --check
+./server/configure-ofono.sh --check
+./server/pair-phone.sh --check
+./scripts/debug.sh
+./scripts/logs.sh --since "10 min ago" --lines 120
+```
+
+`--apply` modes only perform conservative service-start or temporary pairing-window actions. They
+do not write active HFP audio routing and do not install network streaming.
+
+## Bluetooth Pairing Phase
+
+The active development phase prepares Bluetooth pairing and HFP discovery only. The intended test is:
+
+```text
+Android Settings -> Bluetooth -> PhoneBridge -> Connected for Calls
+```
+
+Procedure:
+
+```bash
+sudo ./server/install.sh --install
+./server/check-system.sh
+sudo ./server/configure-bluetooth.sh --apply
+./server/pair-phone.sh --discoverable
+```
+
+See [Bluetooth pairing procedure](docs/pairing.md).
+
+## Roadmap
+
+- v0.1 diagnostic foundation
+- v0.2 clean installation flow
+- v0.3 Bluetooth pairing flow
+- v0.4 Android sees the server as a hands-free device
+- v0.5 local bidirectional HFP audio
+- v0.6 local PipeWire audio exposure
+- v0.7 network audio transport preparation
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Bluetooth notes](docs/bluetooth.md)
+- [Bluetooth pairing procedure](docs/pairing.md)
 - [Audio notes](docs/audio.md)
+- [Research notes](docs/research/decision-log.md)
 - [Server scripts](server/README.md)
 - [systemd notes](systemd/README.md)
