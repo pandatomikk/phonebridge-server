@@ -50,6 +50,13 @@ Impact: pairing works but call audio is unstable, narrowband only, delayed, or a
 Mitigation: Test onboard adapter and one known-good USB Bluetooth adapter. Capture `btmon` traces
 when audio setup fails.
 
+Additional Raspberry Pi limits to validate:
+
+- shared 2.4 GHz Wi-Fi/Bluetooth coexistence
+- power supply stability under USB Bluetooth dongles
+- firmware/kernel differences between Pi models
+- headless user-session behavior for PipeWire
+
 ## PipeWire Session Availability on Headless Systems
 
 Risk: PipeWire and WirePlumber are user services, but a headless gateway may not have a stable login

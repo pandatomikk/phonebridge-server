@@ -67,6 +67,18 @@ A2DP is high-quality one-way or mostly media-oriented audio. It is not the corre
 bidirectional phone call audio. A2DP may appear when Android connects for music playback, but
 PhoneBridge's car-kit behavior depends on HFP/HSP, not A2DP.
 
+## HSP Position
+
+HSP is older and simpler than HFP. It can provide headset-style bidirectional audio, but it lacks
+the richer hands-free call-control model expected by car kits. PhoneBridge should keep HSP in the
+research scope only as a compatibility fallback.
+
+Decision:
+
+- Primary: HFP Hands-Free (`hfp_hf`)
+- Fallback research item: HSP Headset (`hsp_hs`)
+- Not primary: A2DP
+
 ## Sources
 
 - BlueZ Profile API: https://bluez.readthedocs.io/en/latest/profile-api/

@@ -96,10 +96,15 @@ Recommended package baseline:
 
 - `bluez`
 - `pipewire`
+- `pipewire-pulse`
 - `pipewire-bin`
 - `wireplumber`
 - `ofono`
 - `dbus`
+- `jq`
+- `usbutils`
+- `pciutils`
+- `rfkill`
 - optional for deeper diagnostics: `bluez-test-tools`, `btmon` provider package if split by distro
 
 Recommended next research validation:

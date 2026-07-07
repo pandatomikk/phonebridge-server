@@ -2,181 +2,361 @@
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
-FAILURES=0
+ERRORS=0
 WARNINGS=0
 
-print_header() {
-  printf '\n== %s ==\n' "$1"
-}
+info() { printf 'INFO    %s\n' "$1"; }
+ok() { printf 'OK      %s\n' "$1"; }
+warning() { WARNINGS=$((WARNINGS + 1)); printf 'WARNING %s\n' "$1"; }
+error() { ERRORS=$((ERRORS + 1)); printf 'ERROR   %s\n' "$1"; }
+section() { printf '\n== %s ==\n' "$1"; }
 
-info() {
-  printf 'INFO  %s\n' "$1"
-}
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [--help]
 
-ok() {
-  printf 'OK    %s\n' "$1"
-}
+Run a read-only PhoneBridge Server diagnostic.
 
-warn() {
-  WARNINGS=$((WARNINGS + 1))
-  printf 'WARN  %s\n' "$1"
-}
-
-fail() {
-  FAILURES=$((FAILURES + 1))
-  printf 'FAIL  %s\n' "$1"
+Exit code:
+  0  no blocking errors were found; warnings may still be present
+  1  at least one blocking prerequisite is missing
+  2  invalid command-line option
+EOF
 }
 
 have_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
-check_command() {
+run_capture() {
+  local output
+  if output="$("$@" 2>/dev/null)"; then
+    printf '%s\n' "$output"
+    return 0
+  fi
+  return 1
+}
+
+package_version() {
+  local package_name="$1"
+  if have_command dpkg-query; then
+    dpkg-query -W -f='${Version}' "$package_name" 2>/dev/null || true
+  fi
+}
+
+command_check() {
   local command_name="$1"
   local package_hint="$2"
+  local severity="${3:-error}"
 
   if have_command "$command_name"; then
-    ok "command '$command_name' is available"
+    ok "command '$command_name' found"
+  elif [[ "$severity" == "warning" ]]; then
+    warning "command '$command_name' missing (package hint: $package_hint)"
   else
-    fail "command '$command_name' is missing (package hint: $package_hint)"
+    error "command '$command_name' missing (package hint: $package_hint)"
   fi
+}
+
+system_bus_available() {
+  have_command busctl && busctl --system list >/dev/null 2>&1
+}
+
+user_bus_available() {
+  have_command busctl && busctl --user list >/dev/null 2>&1
+}
+
+systemd_available() {
+  have_command systemctl && systemctl --version >/dev/null 2>&1
 }
 
 system_service_state() {
   local service_name="$1"
+  local severity="${2:-error}"
 
-  if ! have_command systemctl; then
-    warn "systemctl is not available; cannot inspect $service_name"
+  if ! systemd_available; then
+    error "systemd/systemctl is not available; cannot inspect $service_name"
     return
   fi
 
-  if systemctl list-unit-files "$service_name" >/dev/null 2>&1; then
-    if systemctl is-active --quiet "$service_name"; then
-      ok "$service_name is active"
-    elif systemctl is-enabled --quiet "$service_name" 2>/dev/null; then
-      warn "$service_name is installed and enabled, but not active"
+  if ! systemctl list-unit-files "$service_name" >/dev/null 2>&1; then
+    if [[ "$severity" == "warning" ]]; then
+      warning "$service_name is not known to systemd"
     else
-      warn "$service_name is installed, but not active or enabled"
+      error "$service_name is not known to systemd"
     fi
+    return
+  fi
+
+  if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+    ok "$service_name is active"
+  elif systemctl is-enabled --quiet "$service_name" 2>/dev/null; then
+    warning "$service_name is enabled but not active"
   else
-    fail "$service_name is not known to systemd"
+    if [[ "$severity" == "warning" ]]; then
+      warning "$service_name is installed but not active"
+    else
+      error "$service_name is installed but not active"
+    fi
   fi
 }
 
 user_service_state() {
   local service_name="$1"
+  local severity="${2:-warning}"
 
-  if ! have_command systemctl; then
-    warn "systemctl is not available; cannot inspect user service $service_name"
+  if ! systemd_available; then
+    error "systemd/systemctl is not available; cannot inspect user service $service_name"
     return
   fi
 
-  if systemctl --user list-unit-files "$service_name" >/dev/null 2>&1; then
-    if systemctl --user is-active --quiet "$service_name"; then
-      ok "user service $service_name is active"
+  if ! systemctl --user list-unit-files "$service_name" >/dev/null 2>&1; then
+    if [[ "$severity" == "error" ]]; then
+      error "user service $service_name is not known for this user"
     else
-      warn "user service $service_name exists but is not active for this user"
+      warning "user service $service_name is not known for this user"
     fi
+    return
+  fi
+
+  if systemctl --user is-active --quiet "$service_name" 2>/dev/null; then
+    ok "user service $service_name is active"
+  elif [[ "$severity" == "error" ]]; then
+    error "user service $service_name exists but is not active"
   else
-    warn "user service $service_name is not known for this user"
+    warning "user service $service_name exists but is not active"
   fi
 }
 
 check_os() {
-  print_header "Operating system"
+  section "OS and platform"
 
   if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
     . /etc/os-release
-    info "system: ${PRETTY_NAME:-unknown Linux}"
-    case "${ID:-unknown}" in
-      debian | raspbian)
-        ok "Debian-family distribution detected"
+    info "OS: ${PRETTY_NAME:-unknown}"
+    info "ID: ${ID:-unknown}; VERSION_ID: ${VERSION_ID:-unknown}; VERSION_CODENAME: ${VERSION_CODENAME:-unknown}"
+
+    case "${ID:-unknown}:${VERSION_CODENAME:-}" in
+      debian:trixie | debian:forky | raspbian:bookworm | raspberrypi:bookworm)
+        ok "target Debian/Raspberry Pi family detected"
+        ;;
+      debian:* | raspbian:* | raspberrypi:*)
+        warning "Debian-family system detected, but target is Debian 13+ or Raspberry Pi OS Bookworm"
         ;;
       *)
-        warn "target platform is Raspberry Pi OS Bookworm or Debian 13+; detected ID=${ID:-unknown}"
+        warning "unsupported OS family for PhoneBridge target stack"
         ;;
     esac
   else
-    warn "/etc/os-release is not readable"
+    error "/etc/os-release is not readable"
+  fi
+
+  info "kernel: $(uname -srmo 2>/dev/null || uname -a)"
+
+  if [[ -r /proc/device-tree/model ]]; then
+    info "hardware model: $(tr -d '\0' </proc/device-tree/model)"
+  elif [[ -r /sys/firmware/devicetree/base/model ]]; then
+    info "hardware model: $(tr -d '\0' </sys/firmware/devicetree/base/model)"
+  else
+    warning "Raspberry Pi model file not found; this may be a non-Pi system"
   fi
 }
 
-check_bluetooth() {
-  print_header "Bluetooth and BlueZ"
-  check_command bluetoothctl bluez
-  check_command btmgmt bluez
-  system_service_state bluetooth.service
+check_system_services() {
+  section "System services and D-Bus"
+  command_check systemctl systemd error
+  command_check busctl systemd error
 
-  if have_command lsmod && lsmod | awk '{print $1}' | grep -qx bluetooth; then
-    ok "kernel module 'bluetooth' is loaded"
+  if systemd_available; then
+    ok "systemd is available"
   else
-    warn "kernel module 'bluetooth' is not currently listed by lsmod"
+    error "systemd is not available"
   fi
 
-  if have_command bluetoothctl; then
-    if bluetoothctl list 2>/dev/null | grep -q '^Controller '; then
-      ok "bluetoothctl reports at least one controller"
+  if system_bus_available; then
+    ok "system D-Bus is reachable"
+  else
+    error "system D-Bus is not reachable"
+  fi
+
+  if user_bus_available; then
+    ok "user D-Bus is reachable"
+  else
+    warning "user D-Bus is not reachable; PipeWire user services may be unavailable"
+  fi
+}
+
+check_user() {
+  section "Current user"
+  info "user: $(id -un) ($(id -u))"
+  info "groups: $(id -nG)"
+
+  for group_name in audio bluetooth plugdev; do
+    if id -nG | tr ' ' '\n' | grep -qx "$group_name"; then
+      ok "user is in '$group_name' group"
     else
-      warn "bluetoothctl does not report a controller"
+      warning "user is not in '$group_name' group"
     fi
+  done
+}
+
+check_bluetooth() {
+  section "Bluetooth and BlueZ"
+  command_check bluetoothctl bluez error
+  command_check btmgmt bluez warning
+  command_check rfkill rfkill warning
+  command_check hciconfig bluez-tools warning
+
+  local bluez_version
+  bluez_version="$(package_version bluez)"
+  if [[ -n "$bluez_version" ]]; then
+    ok "BlueZ package version: $bluez_version"
+  else
+    error "BlueZ package is not installed or version is not detectable"
+  fi
+
+  system_service_state bluetooth.service error
+
+  if have_command rfkill; then
+    if rfkill list bluetooth >/dev/null 2>&1; then
+      info "rfkill Bluetooth state:"
+      rfkill list bluetooth | sed 's/^/INFO    /'
+      if rfkill list bluetooth | grep -qi 'blocked: yes'; then
+        warning "at least one Bluetooth rfkill entry is blocked"
+      else
+        ok "Bluetooth rfkill entries are not blocked"
+      fi
+    else
+      warning "rfkill does not list Bluetooth entries"
+    fi
+  fi
+
+  if have_command bluetoothctl && system_bus_available; then
+    local controllers
+    controllers="$(run_capture bluetoothctl list || true)"
+    if printf '%s\n' "$controllers" | grep -q '^Controller '; then
+      ok "Bluetooth controller detected"
+      printf '%s\n' "$controllers" | sed 's/^/INFO    /'
+      info "default controller state:"
+      bluetoothctl show 2>/dev/null | sed 's/^/INFO    /' || warning "bluetoothctl show failed"
+    else
+      error "no Bluetooth controller detected by bluetoothctl"
+    fi
+  else
+    warning "skipping bluetoothctl controller inspection because command or system D-Bus is unavailable"
   fi
 }
 
 check_pipewire() {
-  print_header "PipeWire"
-  check_command pipewire pipewire
-  check_command pw-cli pipewire-bin
-  check_command wpctl wireplumber
-  user_service_state pipewire.service
-  user_service_state pipewire-pulse.service
+  section "PipeWire"
+  command_check pipewire pipewire error
+  command_check pw-cli pipewire-bin error
+  command_check pw-dump pipewire-bin warning
+  command_check wpctl wireplumber error
+  command_check pactl pipewire-pulse warning
+
+  local version
+  version="$(package_version pipewire)"
+  if [[ -n "$version" ]]; then
+    ok "PipeWire package version: $version"
+  else
+    error "PipeWire package is not installed or version is not detectable"
+  fi
+
+  user_service_state pipewire.service warning
+  user_service_state pipewire-pulse.service warning
 
   if have_command pw-cli; then
     if pw-cli info 0 >/dev/null 2>&1; then
-      ok "PipeWire core is reachable through pw-cli"
+      ok "PipeWire core is reachable"
+      info "PipeWire audio nodes:"
+      pw-cli ls Node 2>/dev/null | sed -n '1,80p' | sed 's/^/INFO    /'
     else
-      warn "pw-cli is installed but cannot reach a PipeWire core for this user"
+      warning "pw-cli is installed but cannot reach a PipeWire core for this user"
+    fi
+  fi
+
+  if have_command wpctl; then
+    if wpctl status >/dev/null 2>&1; then
+      ok "wpctl can read PipeWire/WirePlumber status"
+      wpctl status 2>/dev/null | sed -n '1,120p' | sed 's/^/INFO    /'
+    else
+      warning "wpctl cannot read PipeWire/WirePlumber status"
     fi
   fi
 }
 
 check_wireplumber() {
-  print_header "WirePlumber"
-  check_command wireplumber wireplumber
-  user_service_state wireplumber.service
+  section "WirePlumber"
+  command_check wireplumber wireplumber error
 
-  if have_command wpctl; then
-    if wpctl status >/dev/null 2>&1; then
-      ok "wpctl can read WirePlumber/PipeWire status"
-    else
-      warn "wpctl is installed but cannot read status"
+  local version
+  version="$(package_version wireplumber)"
+  if [[ -n "$version" ]]; then
+    ok "WirePlumber package version: $version"
+  else
+    error "WirePlumber package is not installed or version is not detectable"
+  fi
+
+  user_service_state wireplumber.service warning
+
+  local config_hits=0
+  for dir in /usr/share/wireplumber /etc/wireplumber "${HOME}/.config/wireplumber"; do
+    if [[ -d "$dir" ]]; then
+      if grep -R "bluez5.roles\|bluez5.hfphsp-backend" "$dir" >/dev/null 2>&1; then
+        config_hits=$((config_hits + 1))
+        info "Bluetooth policy keys found under $dir"
+      fi
     fi
+  done
+  if ((config_hits == 0)); then
+    warning "WirePlumber Bluetooth role/backend config keys were not found in standard paths"
   fi
 }
 
 check_ofono() {
-  print_header "oFono"
-  check_command ofonod ofono
-  system_service_state ofono.service
+  section "oFono"
+  command_check ofonod ofono error
 
-  if have_command busctl; then
+  local version
+  version="$(package_version ofono)"
+  if [[ -n "$version" ]]; then
+    ok "oFono package version: $version"
+  else
+    error "oFono package is not installed or version is not detectable"
+  fi
+
+  system_service_state ofono.service error
+
+  if system_bus_available; then
     if busctl --system list 2>/dev/null | grep -q 'org.ofono'; then
       ok "org.ofono is present on the system D-Bus"
+      info "oFono object tree:"
+      busctl --system tree org.ofono 2>/dev/null | sed -n '1,80p' | sed 's/^/INFO    /' || true
     else
-      warn "org.ofono is not present on the system D-Bus"
+      warning "org.ofono is not present on the system D-Bus"
     fi
   else
-    warn "busctl is not available; cannot inspect system D-Bus"
+    warning "system D-Bus unavailable; skipping oFono D-Bus inspection"
   fi
 }
 
-usage() {
-  cat <<EOF
-Usage: $SCRIPT_NAME [--help]
+check_profiles() {
+  section "Bluetooth profile visibility"
 
-Run PhoneBridge Server v0.1 diagnostics.
-This script does not modify system configuration.
-EOF
+  if have_command bluetoothctl && system_bus_available; then
+    local show_output
+    show_output="$(run_capture bluetoothctl show || true)"
+    if printf '%s\n' "$show_output" | grep -q 'UUID:'; then
+      info "local controller advertised UUIDs:"
+      printf '%s\n' "$show_output" | grep 'UUID:' | sed 's/^/INFO    /'
+    else
+      warning "no local Bluetooth UUIDs detected from bluetoothctl show"
+    fi
+  else
+    warning "cannot inspect Bluetooth profiles without bluetoothctl and system D-Bus"
+  fi
 }
 
 main() {
@@ -194,20 +374,23 @@ main() {
       ;;
   esac
 
-  print_header "PhoneBridge Server diagnostic"
-  info "diagnostic only; no system configuration will be changed"
+  section "PhoneBridge Server diagnostic"
+  info "read-only diagnostic; no system configuration will be changed"
 
   check_os
+  check_system_services
+  check_user
   check_bluetooth
   check_pipewire
   check_wireplumber
   check_ofono
+  check_profiles
 
-  print_header "Summary"
-  printf 'Warnings: %d\n' "$WARNINGS"
-  printf 'Failures: %d\n' "$FAILURES"
+  section "Summary"
+  printf 'INFO    warnings: %d\n' "$WARNINGS"
+  printf 'INFO    errors: %d\n' "$ERRORS"
 
-  if ((FAILURES > 0)); then
+  if ((ERRORS > 0)); then
     return 1
   fi
 }

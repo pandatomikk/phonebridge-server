@@ -8,7 +8,7 @@ All scripts use `set -euo pipefail` and should be safe to run independently.
 ## Scripts
 
 ```text
-install.sh              List or install target Debian packages
+install.sh              List, check, or install target Debian packages
 uninstall.sh            List packages and provide an explicit uninstall path
 check-system.sh         Run the v0.1 diagnostic checks
 configure-bluetooth.sh  Inspect or later configure BlueZ behavior
@@ -30,8 +30,9 @@ well understood.
 ```bash
 ./server/check-system.sh
 ./server/install.sh --list
+./server/install.sh --check
 sudo ./server/install.sh --install
-./server/configure-bluetooth.sh
-./server/configure-pipewire.sh
-./server/configure-ofono.sh
+./server/configure-bluetooth.sh --check
+./server/configure-pipewire.sh --check
+./server/configure-ofono.sh --check
 ```

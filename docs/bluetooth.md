@@ -2,6 +2,10 @@
 
 PhoneBridge Server targets Bluetooth HFP/HSP behavior for Android phones.
 
+HFP is the primary target because Android should see the server as a Hands-Free device, like a car
+kit. HSP remains a fallback research item. A2DP is media audio and is not the correct profile for
+bidirectional call audio.
+
 ## Components
 
 - BlueZ provides Linux Bluetooth controller, pairing, discovery, and profile plumbing.
@@ -17,11 +21,16 @@ The current diagnostic scripts check:
 - whether a Bluetooth controller is visible
 - whether `bluetooth.service` exists and is active
 - whether `bluetoothctl` can report controllers
+- whether rfkill blocks Bluetooth
+- whether the controller is pairable/discoverable
 
 ## Safety
 
 Bluetooth discoverable and pairable modes can expose the device to nearby phones and computers.
 The v0.1 scripts do not enable those modes automatically.
+
+`server/configure-bluetooth.sh --apply` may request temporary pairable/discoverable mode, but it
+does not write permanent BlueZ configuration and does not force HFP roles.
 
 Future configuration helpers should:
 
