@@ -1,0 +1,15 @@
+[Unit]
+Description=PhoneBridge network audio routing
+Documentation=file:@PROJECT_DIR@/docs/network-audio.md
+After=pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/phonebridge-server/network-audio.env
+ExecStart=@PROJECT_DIR@/server/configure-network-audio.sh --serve-peer ${PHONEBRIDGE_PEER_HOST} --port ${PHONEBRIDGE_PORT}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

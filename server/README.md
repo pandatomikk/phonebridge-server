@@ -16,6 +16,7 @@ pair-phone.sh           Temporary discoverable mode and Android pairing helper
 configure-pipewire.sh   Inspect or later configure PipeWire/WirePlumber behavior
 configure-ofono.sh      Inspect or later configure oFono behavior
 configure-network-audio.sh  Temporary PipeWire/Pulse TCP tunnel helpers
+install-network-audio-service.sh  Install the network audio routing user service
 ```
 
 ## Conservative Defaults
@@ -43,5 +44,6 @@ sudo ./server/install.sh --install
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
 ./server/configure-network-audio.sh --check
+./server/install-network-audio-service.sh --status
 ./scripts/logs.sh --since "10 min ago" --lines 120
 ```
