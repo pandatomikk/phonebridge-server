@@ -46,6 +46,10 @@ and requests temporary pairable/discoverable mode. It does not edit `bluetoothd.
 ./server/pair-phone.sh --discoverable
 ```
 
+Keep the terminal open while pairing. The helper starts a foreground `bluetoothctl` pairing agent.
+If it shows an `[agent] Confirm passkey` prompt, type `yes` in the terminal and confirm the same
+code on Android. Do not type the numeric passkey unless `bluetoothctl` explicitly asks for it.
+
 5. On Android:
 
 ```text
@@ -69,7 +73,9 @@ For manual pairing support:
 ./server/pair-phone.sh --pair
 ```
 
-The helper prints the relevant `bluetoothctl` commands and current paired-device status.
+The helper prints the relevant `bluetoothctl` commands and current paired-device status. Keep the
+manual `bluetoothctl` session open while pairing from Android. Use `agent DisplayYesNo`; if prompted
+with `[agent] Confirm passkey`, type `yes`, then trust the phone after pairing succeeds.
 
 ## Removing a Phone
 

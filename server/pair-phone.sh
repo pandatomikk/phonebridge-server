@@ -17,7 +17,8 @@ Usage: $SCRIPT_NAME [--check|--discoverable|--pair|--remove|--help]
 Commands:
   --check         Show current adapter and paired-device state. No changes. Default.
   --discoverable  Enable temporary discoverable/pairable mode for ${DISCOVERABLE_SECONDS}s,
-                  display a countdown, then restore previous discoverable/pairable state.
+                  keep a foreground pairing agent open, then restore previous
+                  discoverable/pairable state when bluetoothctl exits.
   --pair          Guide Android pairing and display current pairing status.
   --remove        List paired devices and interactively remove one selected device.
   --help          Show this help.
@@ -117,13 +118,38 @@ discoverable_window() {
 
   ok "PhoneBridge should be discoverable for ${DISCOVERABLE_SECONDS}s"
   info "On Android: Settings -> Bluetooth -> Pair new device -> select PhoneBridge"
+  info "A bluetoothctl pairing agent will stay open in this terminal."
+  info "If bluetoothctl shows an [agent] Confirm passkey prompt, type yes and confirm the same code on Android."
+  info "Do not type the numeric passkey unless bluetoothctl explicitly asks for input."
+  info "When pairing succeeds or the window expires, type quit if bluetoothctl is still open."
 
-  local remaining
-  for ((remaining = DISCOVERABLE_SECONDS; remaining > 0; remaining--)); do
-    printf '\rINFO    discoverable window remaining: %3ss ' "$remaining"
-    sleep 1
-  done
-  printf '\n'
+  if [[ ! -t 0 ]]; then
+    warning "stdin is not interactive; falling back to countdown without a pairing confirmation agent"
+    local remaining
+    for ((remaining = DISCOVERABLE_SECONDS; remaining > 0; remaining--)); do
+      printf '\rINFO    discoverable window remaining: %3ss ' "$remaining"
+      sleep 1
+    done
+    printf '\n'
+  elif bluetoothctl --help 2>/dev/null | grep -q -- '--agent'; then
+    local init_script
+    init_script="$(mktemp)"
+    {
+      printf 'default-agent\n'
+      printf 'show\n'
+      printf 'paired-devices\n'
+    } >"$init_script"
+    bluetoothctl --agent DisplayYesNo --timeout "$DISCOVERABLE_SECONDS" --init-script "$init_script" || warning "bluetoothctl pairing agent exited with a non-zero status"
+    rm -f "$init_script"
+  else
+    warning "bluetoothctl does not advertise --agent support; use the manual flow printed by --pair"
+    local remaining
+    for ((remaining = DISCOVERABLE_SECONDS; remaining > 0; remaining--)); do
+      printf '\rINFO    discoverable window remaining: %3ss ' "$remaining"
+      sleep 1
+    done
+    printf '\n'
+  fi
 
   restore_state "$previous_discoverable" "$previous_pairable"
   trap - EXIT INT TERM
@@ -139,10 +165,20 @@ Manual bluetoothctl flow if Android requests confirmation:
 
   bluetoothctl
   power on
-  agent KeyboardDisplay
+  agent DisplayYesNo
   default-agent
   pairable on
   discoverable on
+
+Keep this bluetoothctl session open while pairing from Android.
+If prompted with "[agent] Confirm passkey", type:
+
+  yes
+
+Do not type the numeric passkey unless bluetoothctl explicitly asks for it.
+
+After pairing succeeds:
+
   devices
   paired-devices
   info <ANDROID_MAC>
