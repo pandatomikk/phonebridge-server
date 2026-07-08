@@ -7,7 +7,7 @@ Wants=pipewire.service pipewire-pulse.service wireplumber.service
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/phonebridge-server/network-audio.env
-ExecStart=@PROJECT_DIR@/server/configure-network-audio.sh --serve-peer ${PHONEBRIDGE_PEER_HOST} --port ${PHONEBRIDGE_PORT}
+ExecStart=@PROJECT_DIR@/server/configure-network-audio.sh --serve-peer ${PHONEBRIDGE_PEER_HOST} --port ${PHONEBRIDGE_PORT} --rate ${PHONEBRIDGE_RATE} --channels ${PHONEBRIDGE_CHANNELS} --latency-ms ${PHONEBRIDGE_LATENCY_MS}
 Restart=on-failure
 RestartSec=5s
 
