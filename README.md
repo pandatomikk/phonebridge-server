@@ -77,6 +77,7 @@ Useful diagnostic commands:
 ./server/configure-bluetooth.sh --check
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
+./server/configure-network-audio.sh --check
 ./server/pair-phone.sh --check
 ./scripts/debug.sh
 ./scripts/logs.sh --since "10 min ago" --lines 120
@@ -121,6 +122,7 @@ See [Bluetooth pairing procedure](docs/pairing.md).
 - [Bluetooth notes](docs/bluetooth.md)
 - [Bluetooth pairing procedure](docs/pairing.md)
 - [Audio notes](docs/audio.md)
+- [Network audio transport](docs/network-audio.md)
 - [Research notes](docs/research/decision-log.md)
 - [Server scripts](server/README.md)
 - [systemd notes](systemd/README.md)

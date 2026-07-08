@@ -20,6 +20,7 @@ readonly REQUIRED_PACKAGES=(
 
 readonly OPTIONAL_PACKAGES=(
   bluez-tools
+  pulseaudio-utils
 )
 
 info() { printf 'INFO    %s\n' "$1"; }

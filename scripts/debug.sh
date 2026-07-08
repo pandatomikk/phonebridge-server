@@ -57,8 +57,9 @@ recommendations() {
 - Run `./server/install.sh --check` to review missing packages.
 - Run `./server/check-system.sh` after installing dependencies on the Raspberry Pi.
 - Run `./server/configure-bluetooth.sh --apply` to start BlueZ and prepare a temporary pairing window.
-- Run `./server/pair-phone.sh --discoverable`, then pair from Android Bluetooth settings.
+- Run `./server/pair-phone.sh --discoverable`, then pair from Android Bluetooth settings; the helper trusts and connects paired phones when the window closes.
 - Verify Android shows PhoneBridge as connected for calls.
+- Run `./server/configure-network-audio.sh --check` before creating temporary network tunnels.
 - If Android pairs but does not show call support, capture this report and inspect HFP backend support before changing configuration.
 EOF
 }

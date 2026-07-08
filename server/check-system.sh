@@ -270,7 +270,7 @@ check_bluetooth() {
       info "rfkill Bluetooth state:"
       rfkill list bluetooth | sed 's/^/INFO    /'
       if rfkill list bluetooth | grep -qi 'blocked: yes'; then
-        warning "at least one Bluetooth rfkill entry is blocked"
+        error "at least one Bluetooth rfkill entry is blocked; run sudo rfkill unblock bluetooth or sudo ./server/configure-bluetooth.sh --apply"
       else
         ok "Bluetooth rfkill entries are not blocked"
       fi
@@ -286,7 +286,18 @@ check_bluetooth() {
       ok "Bluetooth controller detected"
       printf '%s\n' "$controllers" | sed 's/^/INFO    /'
       info "default controller state:"
-      bluetoothctl show 2>/dev/null | sed 's/^/INFO    /' || warning "bluetoothctl show failed"
+      local show_output powered power_state
+      show_output="$(bluetoothctl show 2>/dev/null || true)"
+      printf '%s\n' "$show_output" | sed 's/^/INFO    /'
+      powered="$(printf '%s\n' "$show_output" | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1)"
+      power_state="$(printf '%s\n' "$show_output" | sed -n 's/^[[:space:]]*PowerState: //p' | head -n 1)"
+      if [[ "$powered" != "yes" ]]; then
+        if [[ "$power_state" == *blocked* ]]; then
+          error "Bluetooth controller is powered off because it is blocked by rfkill"
+        else
+          warning "Bluetooth controller is not powered on"
+        fi
+      fi
     else
       error "no Bluetooth controller detected by bluetoothctl"
     fi
@@ -301,7 +312,7 @@ check_pipewire() {
   command_check pw-cli pipewire-bin error
   command_check pw-dump pipewire-bin warning
   command_check wpctl wireplumber error
-  command_check pactl pipewire-pulse warning
+  command_check pactl pulseaudio-utils warning
 
   local version
   version="$(package_version pipewire)"
