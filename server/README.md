@@ -15,6 +15,7 @@ configure-bluetooth.sh  Inspect or later configure BlueZ behavior
 pair-phone.sh           Temporary discoverable mode and Android pairing helper
 configure-pipewire.sh   Inspect or later configure PipeWire/WirePlumber behavior
 configure-ofono.sh      Inspect or later configure oFono behavior
+configure-network-audio.sh  Temporary PipeWire/Pulse TCP tunnel helpers
 ```
 
 ## Conservative Defaults
@@ -38,7 +39,9 @@ sudo ./server/install.sh --install
 ./server/configure-bluetooth.sh --check
 ./server/pair-phone.sh --check
 ./server/pair-phone.sh --discoverable
+./server/pair-phone.sh --trust
 ./server/configure-pipewire.sh --check
 ./server/configure-ofono.sh --check
+./server/configure-network-audio.sh --check
 ./scripts/logs.sh --since "10 min ago" --lines 120
 ```

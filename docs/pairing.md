@@ -47,8 +47,8 @@ and requests temporary pairable/discoverable mode. It does not edit `bluetoothd.
 ```
 
 Keep the terminal open while pairing. The helper starts a foreground `bluetoothctl` pairing agent.
-If it shows an `[agent] Confirm passkey` prompt, type `yes` in the terminal and confirm the same
-code on Android. Do not type the numeric passkey unless `bluetoothctl` explicitly asks for it.
+It uses `NoInputNoOutput`, which matches a headset/car-kit style device and normally does not ask
+for terminal input. When the pairing window closes, the helper trusts and connects paired devices.
 
 5. On Android:
 
@@ -63,6 +63,12 @@ Settings -> Bluetooth -> Pair new device -> PhoneBridge
 ./scripts/debug.sh > phonebridge-bluetooth-report.md
 ```
 
+If the pairing succeeded but trust/connect was interrupted, re-run:
+
+```bash
+./server/pair-phone.sh --trust
+```
+
 On Android, check whether the paired device says call audio or connected for calls.
 
 ## Pairing Guide
@@ -74,8 +80,8 @@ For manual pairing support:
 ```
 
 The helper prints the relevant `bluetoothctl` commands and current paired-device status. Keep the
-manual `bluetoothctl` session open while pairing from Android. Use `agent DisplayYesNo`; if prompted
-with `[agent] Confirm passkey`, type `yes`, then trust the phone after pairing succeeds.
+manual `bluetoothctl` session open while pairing from Android. Use `agent NoInputNoOutput`, then
+trust and connect the phone after pairing succeeds.
 
 ## Removing a Phone
 

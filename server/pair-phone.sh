@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 DISCOVERABLE_SECONDS=180
+PAIRING_AGENT_CAPABILITY="NoInputNoOutput"
 
 info() { printf 'INFO    %s\n' "$1"; }
 ok() { printf 'OK      %s\n' "$1"; }
@@ -12,13 +13,14 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--discoverable|--pair|--remove|--help]
+Usage: $SCRIPT_NAME [--check|--discoverable|--trust|--pair|--remove|--help]
 
 Commands:
   --check         Show current adapter and paired-device state. No changes. Default.
   --discoverable  Enable temporary discoverable/pairable mode for ${DISCOVERABLE_SECONDS}s,
-                  keep a foreground pairing agent open, then restore previous
-                  discoverable/pairable state when bluetoothctl exits.
+                  keep a foreground ${PAIRING_AGENT_CAPABILITY} pairing agent open, then restore previous
+                  discoverable/pairable state and trust/connect paired devices.
+  --trust         Trust and connect all currently paired devices.
   --pair          Guide Android pairing and display current pairing status.
   --remove        List paired devices and interactively remove one selected device.
   --help          Show this help.
@@ -61,6 +63,10 @@ adapter_present() {
 
 paired_devices() {
   bluetoothctl paired-devices 2>/dev/null || bluetoothctl devices Paired 2>/dev/null || true
+}
+
+device_mac_from_line() {
+  awk '{print $2}' <<<"$1"
 }
 
 show_status() {
@@ -118,9 +124,8 @@ discoverable_window() {
 
   ok "PhoneBridge should be discoverable for ${DISCOVERABLE_SECONDS}s"
   info "On Android: Settings -> Bluetooth -> Pair new device -> select PhoneBridge"
-  info "A bluetoothctl pairing agent will stay open in this terminal."
-  info "If bluetoothctl shows an [agent] Confirm passkey prompt, type yes and confirm the same code on Android."
-  info "Do not type the numeric passkey unless bluetoothctl explicitly asks for input."
+  info "A bluetoothctl ${PAIRING_AGENT_CAPABILITY} pairing agent will stay open in this terminal."
+  info "This mode matches a headset/car-kit style device and normally does not ask for terminal input."
   info "When pairing succeeds or the window expires, type quit if bluetoothctl is still open."
 
   if [[ ! -t 0 ]]; then
@@ -139,7 +144,7 @@ discoverable_window() {
       printf 'show\n'
       printf 'paired-devices\n'
     } >"$init_script"
-    bluetoothctl --agent DisplayYesNo --timeout "$DISCOVERABLE_SECONDS" --init-script "$init_script" || warning "bluetoothctl pairing agent exited with a non-zero status"
+    bluetoothctl --agent "$PAIRING_AGENT_CAPABILITY" --timeout "$DISCOVERABLE_SECONDS" --init-script "$init_script" || warning "bluetoothctl pairing agent exited with a non-zero status"
     rm -f "$init_script"
   else
     warning "bluetoothctl does not advertise --agent support; use the manual flow printed by --pair"
@@ -153,7 +158,34 @@ discoverable_window() {
 
   restore_state "$previous_discoverable" "$previous_pairable"
   trap - EXIT INT TERM
+  trust_paired_devices
   show_status
+}
+
+trust_paired_devices() {
+  section "Trust paired devices"
+  require_bluetoothctl
+
+  local devices
+  devices="$(paired_devices)"
+  if [[ -z "$devices" ]]; then
+    warning "no paired devices found"
+    return 0
+  fi
+
+  local line mac
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    mac="$(device_mac_from_line "$line")"
+    if [[ -z "$mac" ]]; then
+      warning "could not parse device line: $line"
+      continue
+    fi
+    info "trusting $line"
+    bluetoothctl trust "$mac" >/dev/null 2>&1 && ok "trusted $mac" || warning "trust failed for $mac"
+    bluetoothctl connect "$mac" >/dev/null 2>&1 && ok "connected $mac" || warning "connect failed for $mac"
+    bluetoothctl info "$mac" 2>/dev/null | sed 's/^/INFO    /' || true
+  done <<<"$devices"
 }
 
 pair_guide() {
@@ -161,21 +193,18 @@ pair_guide() {
   require_bluetoothctl
 
   cat <<'EOF'
-Manual bluetoothctl flow if Android requests confirmation:
+Manual bluetoothctl flow for Android pairing:
 
   bluetoothctl
   power on
-  agent DisplayYesNo
+  agent NoInputNoOutput
   default-agent
   pairable on
   discoverable on
 
 Keep this bluetoothctl session open while pairing from Android.
-If prompted with "[agent] Confirm passkey", type:
-
-  yes
-
-Do not type the numeric passkey unless bluetoothctl explicitly asks for it.
+NoInputNoOutput matches a headset/car-kit style device and normally does not ask
+for terminal input.
 
 After pairing succeeds:
 
@@ -183,6 +212,7 @@ After pairing succeeds:
   paired-devices
   info <ANDROID_MAC>
   trust <ANDROID_MAC>
+  connect <ANDROID_MAC>
 
 This helper does not assume success. Confirm on Android that the device is connected for calls.
 EOF
@@ -223,7 +253,7 @@ remove_device() {
 
   local line mac
   line="$(printf '%s\n' "$devices" | sed -n "${selection}p")"
-  mac="$(awk '{print $2}' <<<"$line")"
+  mac="$(device_mac_from_line "$line")"
   if [[ -z "$mac" ]]; then
     error "selection does not match a paired device"
     return 1
@@ -242,7 +272,7 @@ remove_device() {
 main() {
   local command="--check"
   case "${1:---check}" in
-    --check | --discoverable | --pair | --remove)
+    --check | --discoverable | --trust | --pair | --remove)
       command="$1"
       ;;
     -h | --help)
@@ -262,6 +292,9 @@ main() {
       ;;
     --discoverable)
       discoverable_window
+      ;;
+    --trust)
+      trust_paired_devices
       ;;
     --pair)
       pair_guide
