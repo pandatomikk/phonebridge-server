@@ -18,7 +18,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME --peer HOST [--port PORT] [--rate HZ] [--channels N] [--latency-ms MS] [--uplink-latency-ms MS] [--remote-source NAME] [--enable] [--start] [--status]
+Usage: $SCRIPT_NAME --peer HOST [--port PORT] [--rate HZ] [--channels N] [--latency-ms MS] [--uplink-latency-ms MS] [--uplink-volume PERCENT] [--remote-source NAME] [--enable] [--start] [--status]
        $SCRIPT_NAME --status
        $SCRIPT_NAME --uninstall
 
@@ -31,6 +31,8 @@ Options:
                 Downlink tunnel target latency. Default: 80.
   --uplink-latency-ms MS
                 Uplink tunnel target latency. Default: 160.
+  --uplink-volume PERCENT
+                Source volume for uplink tunnel. Default: 100%.
   --remote-source NAME
                 PC source name to use for uplink. Default: PC default source.
   --enable      Enable the user service at login.
@@ -61,7 +63,8 @@ install_service() {
   local channels="$4"
   local latency_ms="$5"
   local uplink_latency_ms="$6"
-  local remote_source="$7"
+  local uplink_volume="$7"
+  local remote_source="$8"
 
   section "Install network audio user service"
   require_systemctl
@@ -88,6 +91,7 @@ install_service() {
     printf 'PHONEBRIDGE_CHANNELS=%q\n' "$channels"
     printf 'PHONEBRIDGE_LATENCY_MS=%q\n' "$latency_ms"
     printf 'PHONEBRIDGE_UPLINK_LATENCY_MS=%q\n' "$uplink_latency_ms"
+    printf 'PHONEBRIDGE_UPLINK_VOLUME=%q\n' "$uplink_volume"
   } >"$ENV_FILE"
 
   ok "installed $SERVICE_FILE"
@@ -133,6 +137,7 @@ main() {
   local channels="1"
   local latency_ms="80"
   local uplink_latency_ms="160"
+  local uplink_volume="100%"
   local remote_source=""
   local do_enable=false
   local do_start=false
@@ -189,6 +194,15 @@ main() {
         fi
         shift 2
         ;;
+      --uplink-volume)
+        uplink_volume="${2:-}"
+        if [[ ! "$uplink_volume" =~ ^[0-9]+%?$ ]]; then
+          error "--uplink-volume requires a numeric percentage such as 125%"
+          return 2
+        fi
+        [[ "$uplink_volume" == *% ]] || uplink_volume="${uplink_volume}%"
+        shift 2
+        ;;
       --remote-source)
         remote_source="${2:-}"
         if [[ -z "$remote_source" ]]; then
@@ -231,7 +245,7 @@ main() {
   fi
 
   if [[ -n "$peer" ]]; then
-    install_service "$peer" "$port" "$rate" "$channels" "$latency_ms" "$uplink_latency_ms" "$remote_source"
+    install_service "$peer" "$port" "$rate" "$channels" "$latency_ms" "$uplink_latency_ms" "$uplink_volume" "$remote_source"
   elif [[ "$do_status" != "true" ]]; then
     error "--peer is required unless using --status or --uninstall"
     usage >&2

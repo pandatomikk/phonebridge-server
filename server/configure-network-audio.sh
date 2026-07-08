@@ -9,6 +9,7 @@ DEFAULT_CHANNELS=1
 DEFAULT_LATENCY_MS=80
 DEFAULT_UPLINK_LATENCY_MS=160
 DEFAULT_RECORD_SECONDS=10
+DEFAULT_UPLINK_VOLUME="100%"
 DOWNLINK_SINK_NAME="phonebridge_network_downlink"
 UPLINK_SOURCE_NAME="phonebridge_network_uplink"
 
@@ -20,7 +21,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--record-uplink FILE|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--uplink-latency-ms MS|--remote-source NAME|--seconds N|--yes|--help]
+Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--record-uplink FILE|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--uplink-latency-ms MS|--uplink-volume PERCENT|--remote-source NAME|--seconds N|--yes|--help]
 
 Modes:
   --check              Inspect PipeWire/Pulse compatibility state. No changes. Default.
@@ -43,6 +44,8 @@ Modes:
   --latency-ms MS      Downlink tunnel target latency. Default: $DEFAULT_LATENCY_MS.
   --uplink-latency-ms MS
                        Uplink tunnel target latency. Default: $DEFAULT_UPLINK_LATENCY_MS.
+  --uplink-volume PERCENT
+                       Source volume for uplink tunnel. Default: $DEFAULT_UPLINK_VOLUME.
   --remote-source NAME Remote PC source name for uplink. Default: peer default source.
   --seconds N          Recording duration for --record-uplink. Default: $DEFAULT_RECORD_SECONDS.
   --yes                Skip interactive confirmation for modes that change PipeWire state.
@@ -145,6 +148,15 @@ endpoint_id() {
   esac
 }
 
+set_uplink_volume() {
+  local volume="$1"
+
+  if endpoint_exists source "$UPLINK_SOURCE_NAME"; then
+    pactl set-source-volume "$UPLINK_SOURCE_NAME" "$volume"
+    ok "set $UPLINK_SOURCE_NAME volume to $volume"
+  fi
+}
+
 sink_input_matches_call() {
   local stream_id="$1"
   pactl list sink-inputs |
@@ -190,8 +202,9 @@ connect_peer() {
   local channels="$4"
   local downlink_latency_ms="$5"
   local uplink_latency_ms="$6"
-  local remote_source="$7"
-  local assume_yes="$8"
+  local uplink_volume="$7"
+  local remote_source="$8"
+  local assume_yes="$9"
 
   section "Connect network audio peer"
   require_pactl
@@ -207,6 +220,7 @@ connect_peer() {
   fi
   source_module="$(pactl load-module module-tunnel-source "${source_args[@]}")"
   ok "loaded uplink tunnel source '$UPLINK_SOURCE_NAME' as module $source_module"
+  set_uplink_volume "$uplink_volume"
 
   info "next routing step: use wpctl/pavucontrol/helvum to route Android call downlink to $DOWNLINK_SINK_NAME and $UPLINK_SOURCE_NAME back into the HFP uplink"
   check_audio
@@ -219,7 +233,8 @@ ensure_peer_connected() {
   local channels="$4"
   local downlink_latency_ms="$5"
   local uplink_latency_ms="$6"
-  local remote_source="$7"
+  local uplink_volume="$7"
+  local remote_source="$8"
 
   section "Ensure network audio peer"
   require_pactl
@@ -242,6 +257,7 @@ ensure_peer_connected() {
     source_module="$(pactl load-module module-tunnel-source "${source_args[@]}")"
     ok "loaded uplink tunnel source '$UPLINK_SOURCE_NAME' as module $source_module"
   fi
+  set_uplink_volume "$uplink_volume"
 }
 
 route_active_call() {
@@ -367,9 +383,10 @@ serve_peer() {
   local channels="$4"
   local downlink_latency_ms="$5"
   local uplink_latency_ms="$6"
-  local remote_source="$7"
+  local uplink_volume="$7"
+  local remote_source="$8"
 
-  ensure_peer_connected "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source"
+  ensure_peer_connected "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$uplink_volume" "$remote_source"
   watch_route true
 }
 
@@ -404,6 +421,7 @@ main() {
   local channels="$DEFAULT_CHANNELS"
   local downlink_latency_ms="$DEFAULT_LATENCY_MS"
   local uplink_latency_ms="$DEFAULT_UPLINK_LATENCY_MS"
+  local uplink_volume="$DEFAULT_UPLINK_VOLUME"
   local remote_source=""
   local record_file=""
   local record_seconds="$DEFAULT_RECORD_SECONDS"
@@ -490,6 +508,15 @@ main() {
         fi
         shift 2
         ;;
+      --uplink-volume)
+        uplink_volume="${2:-}"
+        if [[ ! "$uplink_volume" =~ ^[0-9]+%?$ ]]; then
+          error "--uplink-volume requires a numeric percentage such as 125%"
+          return 2
+        fi
+        [[ "$uplink_volume" == *% ]] || uplink_volume="${uplink_volume}%"
+        shift 2
+        ;;
       --remote-source)
         remote_source="${2:-}"
         if [[ -z "$remote_source" ]]; then
@@ -530,10 +557,10 @@ main() {
       load_listener "$acl" "$port" "$assume_yes"
       ;;
     --connect-peer)
-      connect_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source" "$assume_yes"
+      connect_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$uplink_volume" "$remote_source" "$assume_yes"
       ;;
     --serve-peer)
-      serve_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source"
+      serve_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$uplink_volume" "$remote_source"
       ;;
     --route-call)
       route_active_call "$assume_yes"

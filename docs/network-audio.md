@@ -77,6 +77,22 @@ If the caller hears crackling but received audio is clean, increase only the upl
 ./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --latency-ms 80 --uplink-latency-ms 220
 ```
 
+If the caller hears clean audio but the level is too low, increase only the uplink source volume:
+
+```bash
+pactl set-source-volume phonebridge_network_uplink 125%
+```
+
+Or recreate the tunnel with a persistent value:
+
+```bash
+./server/configure-network-audio.sh --unload --yes
+./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --uplink-volume 125%
+```
+
+Increase gradually: `125%`, then `140%`, then `150%`. If distortion returns, back off to the last
+clean value.
+
 To isolate whether distortion is already present between the PC and Raspberry Pi, record the uplink
 source on the Raspberry Pi before routing it into Bluetooth:
 
