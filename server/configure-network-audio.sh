@@ -7,6 +7,7 @@ DEFAULT_ACL="127.0.0.1"
 DEFAULT_RATE=16000
 DEFAULT_CHANNELS=1
 DEFAULT_LATENCY_MS=80
+DEFAULT_UPLINK_LATENCY_MS=160
 DOWNLINK_SINK_NAME="phonebridge_network_downlink"
 UPLINK_SOURCE_NAME="phonebridge_network_uplink"
 
@@ -18,7 +19,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--yes|--help]
+Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--uplink-latency-ms MS|--remote-source NAME|--yes|--help]
 
 Modes:
   --check              Inspect PipeWire/Pulse compatibility state. No changes. Default.
@@ -37,7 +38,10 @@ Modes:
   --port PORT          Pulse-compatible TCP port. Default: $DEFAULT_PORT.
   --rate HZ            Tunnel sample rate. Default: $DEFAULT_RATE for HFP wideband speech.
   --channels N         Tunnel channel count. Default: $DEFAULT_CHANNELS for mono HFP audio.
-  --latency-ms MS      Tunnel target latency. Default: $DEFAULT_LATENCY_MS.
+  --latency-ms MS      Downlink tunnel target latency. Default: $DEFAULT_LATENCY_MS.
+  --uplink-latency-ms MS
+                       Uplink tunnel target latency. Default: $DEFAULT_UPLINK_LATENCY_MS.
+  --remote-source NAME Remote PC source name for uplink. Default: peer default source.
   --yes                Skip interactive confirmation for modes that change PipeWire state.
   --help               Show this help.
 
@@ -174,18 +178,24 @@ connect_peer() {
   local port="$2"
   local rate="$3"
   local channels="$4"
-  local latency_ms="$5"
-  local assume_yes="$6"
+  local downlink_latency_ms="$5"
+  local uplink_latency_ms="$6"
+  local remote_source="$7"
+  local assume_yes="$8"
 
   section "Connect network audio peer"
   require_pactl
   confirm_apply "$assume_yes" "This will create local tunnel endpoints to tcp:$peer:$port."
 
   local sink_module source_module
-  sink_module="$(pactl load-module module-tunnel-sink "server=tcp:$peer:$port" "sink_name=$DOWNLINK_SINK_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$latency_ms" "sink_properties=device.description=PhoneBridge_Network_Downlink")"
+  sink_module="$(pactl load-module module-tunnel-sink "server=tcp:$peer:$port" "sink_name=$DOWNLINK_SINK_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$downlink_latency_ms" "sink_properties=device.description=PhoneBridge_Network_Downlink")"
   ok "loaded downlink tunnel sink '$DOWNLINK_SINK_NAME' as module $sink_module"
 
-  source_module="$(pactl load-module module-tunnel-source "server=tcp:$peer:$port" "source_name=$UPLINK_SOURCE_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$latency_ms" "source_properties=device.description=PhoneBridge_Network_Uplink")"
+  local source_args=("server=tcp:$peer:$port" "source_name=$UPLINK_SOURCE_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$uplink_latency_ms" "source_properties=device.description=PhoneBridge_Network_Uplink")
+  if [[ -n "$remote_source" ]]; then
+    source_args+=("source=$remote_source")
+  fi
+  source_module="$(pactl load-module module-tunnel-source "${source_args[@]}")"
   ok "loaded uplink tunnel source '$UPLINK_SOURCE_NAME' as module $source_module"
 
   info "next routing step: use wpctl/pavucontrol/helvum to route Android call downlink to $DOWNLINK_SINK_NAME and $UPLINK_SOURCE_NAME back into the HFP uplink"
@@ -197,7 +207,9 @@ ensure_peer_connected() {
   local port="$2"
   local rate="$3"
   local channels="$4"
-  local latency_ms="$5"
+  local downlink_latency_ms="$5"
+  local uplink_latency_ms="$6"
+  local remote_source="$7"
 
   section "Ensure network audio peer"
   require_pactl
@@ -206,14 +218,18 @@ ensure_peer_connected() {
   if endpoint_exists sink "$DOWNLINK_SINK_NAME"; then
     ok "downlink sink '$DOWNLINK_SINK_NAME' already exists"
   else
-    sink_module="$(pactl load-module module-tunnel-sink "server=tcp:$peer:$port" "sink_name=$DOWNLINK_SINK_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$latency_ms" "sink_properties=device.description=PhoneBridge_Network_Downlink")"
+    sink_module="$(pactl load-module module-tunnel-sink "server=tcp:$peer:$port" "sink_name=$DOWNLINK_SINK_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$downlink_latency_ms" "sink_properties=device.description=PhoneBridge_Network_Downlink")"
     ok "loaded downlink tunnel sink '$DOWNLINK_SINK_NAME' as module $sink_module"
   fi
 
   if endpoint_exists source "$UPLINK_SOURCE_NAME"; then
     ok "uplink source '$UPLINK_SOURCE_NAME' already exists"
   else
-    source_module="$(pactl load-module module-tunnel-source "server=tcp:$peer:$port" "source_name=$UPLINK_SOURCE_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$latency_ms" "source_properties=device.description=PhoneBridge_Network_Uplink")"
+    local source_args=("server=tcp:$peer:$port" "source_name=$UPLINK_SOURCE_NAME" "format=s16le" "rate=$rate" "channels=$channels" "latency_msec=$uplink_latency_ms" "source_properties=device.description=PhoneBridge_Network_Uplink")
+    if [[ -n "$remote_source" ]]; then
+      source_args+=("source=$remote_source")
+    fi
+    source_module="$(pactl load-module module-tunnel-source "${source_args[@]}")"
     ok "loaded uplink tunnel source '$UPLINK_SOURCE_NAME' as module $source_module"
   fi
 }
@@ -314,9 +330,11 @@ serve_peer() {
   local port="$2"
   local rate="$3"
   local channels="$4"
-  local latency_ms="$5"
+  local downlink_latency_ms="$5"
+  local uplink_latency_ms="$6"
+  local remote_source="$7"
 
-  ensure_peer_connected "$peer" "$port" "$rate" "$channels" "$latency_ms"
+  ensure_peer_connected "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source"
   watch_route true
 }
 
@@ -349,7 +367,9 @@ main() {
   local port="$DEFAULT_PORT"
   local rate="$DEFAULT_RATE"
   local channels="$DEFAULT_CHANNELS"
-  local latency_ms="$DEFAULT_LATENCY_MS"
+  local downlink_latency_ms="$DEFAULT_LATENCY_MS"
+  local uplink_latency_ms="$DEFAULT_UPLINK_LATENCY_MS"
+  local remote_source=""
   local assume_yes=false
 
   while (($# > 0)); do
@@ -409,9 +429,25 @@ main() {
         shift 2
         ;;
       --latency-ms)
-        latency_ms="${2:-}"
-        if [[ ! "$latency_ms" =~ ^[0-9]+$ ]]; then
+        downlink_latency_ms="${2:-}"
+        if [[ ! "$downlink_latency_ms" =~ ^[0-9]+$ ]]; then
           error "--latency-ms requires a numeric value"
+          return 2
+        fi
+        shift 2
+        ;;
+      --uplink-latency-ms)
+        uplink_latency_ms="${2:-}"
+        if [[ ! "$uplink_latency_ms" =~ ^[0-9]+$ ]]; then
+          error "--uplink-latency-ms requires a numeric value"
+          return 2
+        fi
+        shift 2
+        ;;
+      --remote-source)
+        remote_source="${2:-}"
+        if [[ -z "$remote_source" ]]; then
+          error "--remote-source requires a source name"
           return 2
         fi
         shift 2
@@ -440,10 +476,10 @@ main() {
       load_listener "$acl" "$port" "$assume_yes"
       ;;
     --connect-peer)
-      connect_peer "$peer" "$port" "$rate" "$channels" "$latency_ms" "$assume_yes"
+      connect_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source" "$assume_yes"
       ;;
     --serve-peer)
-      serve_peer "$peer" "$port" "$rate" "$channels" "$latency_ms"
+      serve_peer "$peer" "$port" "$rate" "$channels" "$downlink_latency_ms" "$uplink_latency_ms" "$remote_source"
       ;;
     --route-call)
       route_active_call "$assume_yes"

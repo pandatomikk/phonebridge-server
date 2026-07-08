@@ -59,14 +59,34 @@ This creates two local PipeWire/Pulse endpoints:
 - `phonebridge_network_downlink`: a sink for Android call audio going to the PC
 - `phonebridge_network_uplink`: a source for PC microphone audio coming back to the Pi
 
-The default tunnel format is `s16le`, mono, `16000Hz`, with `80ms` target latency. This matches
-typical HFP wideband speech better than the PipeWire/Pulse default `48000Hz` stereo tunnel and
-avoids unnecessary resampling for calls.
+The default tunnel format is `s16le`, mono, `16000Hz`. The downlink target latency defaults to
+`80ms`; the uplink target latency defaults to `160ms` because microphone audio is more sensitive to
+network jitter on this tunnel path. This matches typical HFP wideband speech better than the
+PipeWire/Pulse default `48000Hz` stereo tunnel and avoids unnecessary resampling for calls.
 
 To tune it manually:
 
 ```bash
-./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --rate 16000 --channels 1 --latency-ms 80
+./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --rate 16000 --channels 1 --latency-ms 80 --uplink-latency-ms 160
+```
+
+If the caller hears crackling but received audio is clean, increase only the uplink buffer:
+
+```bash
+./server/configure-network-audio.sh --unload --yes
+./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --latency-ms 80 --uplink-latency-ms 220
+```
+
+On the PC, list source names if you need to force the exact microphone used for uplink:
+
+```bash
+pactl list short sources
+```
+
+Then on the Raspberry Pi:
+
+```bash
+./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --remote-source <PC_SOURCE_NAME>
 ```
 
 Inspect them with:
@@ -111,7 +131,8 @@ Pi:
 ./server/install-network-audio-service.sh --peer <PC_IP_OR_HOSTNAME> --enable --start --status
 ```
 
-The service uses the same default tunnel format: `16000Hz`, mono, `80ms`.
+The service uses the same default tunnel format: `16000Hz`, mono, `80ms` downlink and `160ms`
+uplink.
 
 This writes:
 
