@@ -8,6 +8,7 @@ DEFAULT_RATE=16000
 DEFAULT_CHANNELS=1
 DEFAULT_LATENCY_MS=80
 DEFAULT_UPLINK_LATENCY_MS=160
+DEFAULT_RECORD_SECONDS=10
 DOWNLINK_SINK_NAME="phonebridge_network_downlink"
 UPLINK_SOURCE_NAME="phonebridge_network_uplink"
 
@@ -19,7 +20,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--uplink-latency-ms MS|--remote-source NAME|--yes|--help]
+Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--record-uplink FILE|--unload|--acl CIDR|--port PORT|--rate HZ|--channels N|--latency-ms MS|--uplink-latency-ms MS|--remote-source NAME|--seconds N|--yes|--help]
 
 Modes:
   --check              Inspect PipeWire/Pulse compatibility state. No changes. Default.
@@ -33,6 +34,7 @@ Modes:
                        Run this on the Raspberry Pi during an active HFP call.
   --watch-route        Keep running and route new Bluetooth call streams as they appear.
                        Run this on the Raspberry Pi after --connect-peer.
+  --record-uplink FILE Record uplink audio received from the PC tunnel to a WAV file.
   --unload             Unload PhoneBridge network audio modules from this host.
   --acl CIDR           IP ACL for --listen. Example: 192.168.1.0/24. Default: $DEFAULT_ACL.
   --port PORT          Pulse-compatible TCP port. Default: $DEFAULT_PORT.
@@ -42,6 +44,7 @@ Modes:
   --uplink-latency-ms MS
                        Uplink tunnel target latency. Default: $DEFAULT_UPLINK_LATENCY_MS.
   --remote-source NAME Remote PC source name for uplink. Default: peer default source.
+  --seconds N          Recording duration for --record-uplink. Default: $DEFAULT_RECORD_SECONDS.
   --yes                Skip interactive confirmation for modes that change PipeWire state.
   --help               Show this help.
 
@@ -61,6 +64,13 @@ require_pactl() {
   fi
   if ! pactl info >/dev/null 2>&1; then
     error "pactl cannot reach the PipeWire/Pulse server for this user"
+    return 1
+  fi
+}
+
+require_parec() {
+  if ! have_command parec; then
+    error "parec is required; install pulseaudio-utils"
     return 1
   fi
 }
@@ -325,6 +335,31 @@ watch_route() {
   done
 }
 
+record_uplink() {
+  local output_file="$1"
+  local seconds="$2"
+  local rate="$3"
+  local channels="$4"
+
+  section "Record network uplink"
+  require_pactl
+  require_parec
+
+  if ! endpoint_exists source "$UPLINK_SOURCE_NAME"; then
+    error "source '$UPLINK_SOURCE_NAME' was not found; run --connect-peer first"
+    return 1
+  fi
+
+  info "recording $seconds seconds from $UPLINK_SOURCE_NAME to $output_file"
+  info "speak into the PC microphone now"
+  parec --device="$UPLINK_SOURCE_NAME" --file-format=wav --format=s16le --rate="$rate" --channels="$channels" "$output_file" &
+  local record_pid="$!"
+  sleep "$seconds"
+  kill "$record_pid" >/dev/null 2>&1 || true
+  wait "$record_pid" >/dev/null 2>&1 || true
+  ok "wrote $output_file"
+}
+
 serve_peer() {
   local peer="$1"
   local port="$2"
@@ -370,6 +405,8 @@ main() {
   local downlink_latency_ms="$DEFAULT_LATENCY_MS"
   local uplink_latency_ms="$DEFAULT_UPLINK_LATENCY_MS"
   local remote_source=""
+  local record_file=""
+  local record_seconds="$DEFAULT_RECORD_SECONDS"
   local assume_yes=false
 
   while (($# > 0)); do
@@ -377,6 +414,15 @@ main() {
       --check | --listen | --route-call | --watch-route | --unload)
         mode="$1"
         shift
+        ;;
+      --record-uplink)
+        mode="--record-uplink"
+        record_file="${2:-}"
+        if [[ -z "$record_file" ]]; then
+          error "--record-uplink requires an output file"
+          return 2
+        fi
+        shift 2
         ;;
       --connect-peer)
         mode="--connect-peer"
@@ -452,6 +498,14 @@ main() {
         fi
         shift 2
         ;;
+      --seconds)
+        record_seconds="${2:-}"
+        if [[ ! "$record_seconds" =~ ^[0-9]+$ ]]; then
+          error "--seconds requires a numeric value"
+          return 2
+        fi
+        shift 2
+        ;;
       --yes)
         assume_yes=true
         shift
@@ -486,6 +540,9 @@ main() {
       ;;
     --watch-route)
       watch_route "$assume_yes"
+      ;;
+    --record-uplink)
+      record_uplink "$record_file" "$record_seconds" "$rate" "$channels"
       ;;
     --unload)
       unload_phonebridge_modules "$assume_yes"

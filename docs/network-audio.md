@@ -77,6 +77,17 @@ If the caller hears crackling but received audio is clean, increase only the upl
 ./server/configure-network-audio.sh --connect-peer <PC_IP_OR_HOSTNAME> --latency-ms 80 --uplink-latency-ms 220
 ```
 
+To isolate whether distortion is already present between the PC and Raspberry Pi, record the uplink
+source on the Raspberry Pi before routing it into Bluetooth:
+
+```bash
+./server/configure-network-audio.sh --record-uplink /tmp/phonebridge-uplink.wav --seconds 10
+```
+
+Speak into the PC microphone during the recording, then listen to `/tmp/phonebridge-uplink.wav`.
+If this file is distorted, debug the PC microphone, PC processing chain, or TCP tunnel first. If the
+file is clean but the caller hears distortion, debug the Raspberry Pi -> HFP uplink path.
+
 On the PC, list source names if you need to force the exact microphone used for uplink:
 
 ```bash
