@@ -73,9 +73,77 @@ After the tunnel endpoints exist, route the call audio in PipeWire:
 - Android/HFP playback node -> `phonebridge_network_downlink`
 - `phonebridge_network_uplink` -> Android/HFP capture/uplink node
 
-For early manual testing, use `wpctl`, `pavucontrol`, `helvum`, or `qpwgraph` to inspect and link
-the nodes. Permanent automatic routing should wait until the exact HFP node names are captured from
-real calls.
+During an active call on the Raspberry Pi, run:
+
+```bash
+./server/configure-network-audio.sh --route-call
+```
+
+This moves current `pactl` sink inputs to `phonebridge_network_downlink` and current source outputs
+to `phonebridge_network_uplink`.
+
+To avoid running a command for each call, keep a watcher running on the Raspberry Pi after
+`--connect-peer`:
+
+```bash
+./server/configure-network-audio.sh --watch-route
+```
+
+The watcher checks every two seconds and moves Bluetooth `bluez_*` call streams to the network
+endpoints when they appear.
+
+## User Service
+
+After the tunnel flow is validated, install the watcher as a systemd user service on the Raspberry
+Pi:
+
+```bash
+./server/install-network-audio-service.sh --peer <PC_IP_OR_HOSTNAME> --enable --start --status
+```
+
+This writes:
+
+- `~/.config/systemd/user/phonebridge-network-audio.service`
+- `~/.config/phonebridge-server/network-audio.env`
+
+The service runs:
+
+```bash
+./server/configure-network-audio.sh --serve-peer <PC_IP_OR_HOSTNAME>
+```
+
+It ensures the tunnel endpoints exist, then keeps the call-routing watcher active.
+
+To inspect or restart it:
+
+```bash
+systemctl --user status phonebridge-network-audio.service
+systemctl --user restart phonebridge-network-audio.service
+journalctl --user -u phonebridge-network-audio.service -f
+```
+
+For a headless Raspberry Pi where the service must run before an interactive login, enable user
+lingering once:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+For manual testing, inspect the active stream IDs:
+
+```bash
+pactl list short sink-inputs
+pactl list short source-outputs
+```
+
+Then move them explicitly:
+
+```bash
+pactl move-sink-input <SINK_INPUT_ID> phonebridge_network_downlink
+pactl move-source-output <SOURCE_OUTPUT_ID> phonebridge_network_uplink
+```
+
+You can also use `wpctl`, `pavucontrol`, `helvum`, or `qpwgraph` to inspect and link the nodes.
 
 ## Cleanup
 

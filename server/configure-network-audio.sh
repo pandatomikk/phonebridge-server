@@ -15,7 +15,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--unload|--acl CIDR|--port PORT|--yes|--help]
+Usage: $SCRIPT_NAME [--check|--listen|--connect-peer HOST|--serve-peer HOST|--route-call|--watch-route|--unload|--acl CIDR|--port PORT|--yes|--help]
 
 Modes:
   --check              Inspect PipeWire/Pulse compatibility state. No changes. Default.
@@ -23,6 +23,12 @@ Modes:
                        Run this on the PC that should receive/play audio or expose a mic.
   --connect-peer HOST  Load tunnel sink/source endpoints to a peer running --listen.
                        Run this on the Raspberry Pi.
+  --serve-peer HOST    Ensure tunnel endpoints to a peer exist, then keep routing calls.
+                       Intended for the systemd user service on the Raspberry Pi.
+  --route-call         Move current active call streams to PhoneBridge tunnel endpoints.
+                       Run this on the Raspberry Pi during an active HFP call.
+  --watch-route        Keep running and route new Bluetooth call streams as they appear.
+                       Run this on the Raspberry Pi after --connect-peer.
   --unload             Unload PhoneBridge network audio modules from this host.
   --acl CIDR           IP ACL for --listen. Example: 192.168.1.0/24. Default: $DEFAULT_ACL.
   --port PORT          Pulse-compatible TCP port. Default: $DEFAULT_PORT.
@@ -85,6 +91,62 @@ check_audio() {
   pactl list short sources 2>/dev/null | sed 's/^/INFO    /' || true
 }
 
+endpoint_exists() {
+  local kind="$1"
+  local name="$2"
+
+  case "$kind" in
+    sink)
+      pactl list short sinks | awk '{print $2}' | grep -qx "$name"
+      ;;
+    source)
+      pactl list short sources | awk '{print $2}' | grep -qx "$name"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+endpoint_id() {
+  local kind="$1"
+  local name="$2"
+
+  case "$kind" in
+    sink)
+      pactl list short sinks | awk -v name="$name" '$2 == name {print $1; exit}'
+      ;;
+    source)
+      pactl list short sources | awk -v name="$name" '$2 == name {print $1; exit}'
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+sink_input_matches_call() {
+  local stream_id="$1"
+  pactl list sink-inputs |
+    awk -v id="$stream_id" '
+      $1 == "Sink" && $2 == "Input" && $3 == "#" id {in_block=1; found=0; next}
+      $1 == "Sink" && $2 == "Input" && in_block {exit found ? 0 : 1}
+      in_block && /bluez_input|bluez_output|bluez5/ {found=1}
+      END {exit found ? 0 : 1}
+    '
+}
+
+source_output_matches_call() {
+  local stream_id="$1"
+  pactl list source-outputs |
+    awk -v id="$stream_id" '
+      $1 == "Source" && $2 == "Output" && $3 == "#" id {in_block=1; found=0; next}
+      $1 == "Source" && $2 == "Output" && in_block {exit found ? 0 : 1}
+      in_block && /bluez_input|bluez_output|bluez5/ {found=1}
+      END {exit found ? 0 : 1}
+    '
+}
+
 load_listener() {
   local acl="$1"
   local port="$2"
@@ -121,6 +183,128 @@ connect_peer() {
   check_audio
 }
 
+ensure_peer_connected() {
+  local peer="$1"
+  local port="$2"
+
+  section "Ensure network audio peer"
+  require_pactl
+
+  local sink_module source_module
+  if endpoint_exists sink "$DOWNLINK_SINK_NAME"; then
+    ok "downlink sink '$DOWNLINK_SINK_NAME' already exists"
+  else
+    sink_module="$(pactl load-module module-tunnel-sink "server=tcp:$peer:$port" "sink_name=$DOWNLINK_SINK_NAME" "sink_properties=device.description=PhoneBridge_Network_Downlink")"
+    ok "loaded downlink tunnel sink '$DOWNLINK_SINK_NAME' as module $sink_module"
+  fi
+
+  if endpoint_exists source "$UPLINK_SOURCE_NAME"; then
+    ok "uplink source '$UPLINK_SOURCE_NAME' already exists"
+  else
+    source_module="$(pactl load-module module-tunnel-source "server=tcp:$peer:$port" "source_name=$UPLINK_SOURCE_NAME" "source_properties=device.description=PhoneBridge_Network_Uplink")"
+    ok "loaded uplink tunnel source '$UPLINK_SOURCE_NAME' as module $source_module"
+  fi
+}
+
+route_active_call() {
+  local assume_yes="$1"
+  local show_summary="${2:-true}"
+
+  if [[ "$show_summary" == "true" ]]; then
+    section "Route active call"
+  fi
+  require_pactl
+  if [[ "$show_summary" == "true" ]]; then
+    confirm_apply "$assume_yes" "This will move current Bluetooth call streams to $DOWNLINK_SINK_NAME and $UPLINK_SOURCE_NAME."
+  fi
+
+  if ! endpoint_exists sink "$DOWNLINK_SINK_NAME"; then
+    error "sink '$DOWNLINK_SINK_NAME' was not found; run --connect-peer first"
+    return 1
+  fi
+  if ! endpoint_exists source "$UPLINK_SOURCE_NAME"; then
+    error "source '$UPLINK_SOURCE_NAME' was not found; run --connect-peer first"
+    return 1
+  fi
+
+  local sink_inputs source_outputs stream_id target_sink_id target_source_id current_target_id
+  target_sink_id="$(endpoint_id sink "$DOWNLINK_SINK_NAME")"
+  target_source_id="$(endpoint_id source "$UPLINK_SOURCE_NAME")"
+  sink_inputs="$(pactl list short sink-inputs)"
+  source_outputs="$(pactl list short source-outputs)"
+
+  if [[ -z "$sink_inputs" ]]; then
+    if [[ "$show_summary" == "true" ]]; then
+      warning "no sink-inputs found; start an active call first"
+    fi
+  else
+    while IFS=$'\t' read -r stream_id current_target_id _; do
+      [[ -n "$stream_id" ]] || continue
+      if [[ "$current_target_id" == "$target_sink_id" ]]; then
+        continue
+      fi
+      if ! sink_input_matches_call "$stream_id"; then
+        continue
+      fi
+      pactl move-sink-input "$stream_id" "$DOWNLINK_SINK_NAME"
+      ok "moved sink-input $stream_id to $DOWNLINK_SINK_NAME"
+    done <<<"$sink_inputs"
+  fi
+
+  if [[ -z "$source_outputs" ]]; then
+    if [[ "$show_summary" == "true" ]]; then
+      warning "no source-outputs found; start an active call first"
+    fi
+  else
+    while IFS=$'\t' read -r stream_id current_target_id _; do
+      [[ -n "$stream_id" ]] || continue
+      if [[ "$current_target_id" == "$target_source_id" ]]; then
+        continue
+      fi
+      if ! source_output_matches_call "$stream_id"; then
+        continue
+      fi
+      pactl move-source-output "$stream_id" "$UPLINK_SOURCE_NAME"
+      ok "moved source-output $stream_id to $UPLINK_SOURCE_NAME"
+    done <<<"$source_outputs"
+  fi
+
+  if [[ "$show_summary" == "true" ]]; then
+    check_audio
+  fi
+}
+
+watch_route() {
+  local assume_yes="$1"
+
+  section "Watch and route calls"
+  require_pactl
+  confirm_apply "$assume_yes" "This will keep running and route Bluetooth call streams to PhoneBridge network endpoints."
+
+  if ! endpoint_exists sink "$DOWNLINK_SINK_NAME"; then
+    error "sink '$DOWNLINK_SINK_NAME' was not found; run --connect-peer first"
+    return 1
+  fi
+  if ! endpoint_exists source "$UPLINK_SOURCE_NAME"; then
+    error "source '$UPLINK_SOURCE_NAME' was not found; run --connect-peer first"
+    return 1
+  fi
+
+  ok "watching for Bluetooth call streams; press Ctrl+C to stop"
+  while true; do
+    route_active_call true false || true
+    sleep 2
+  done
+}
+
+serve_peer() {
+  local peer="$1"
+  local port="$2"
+
+  ensure_peer_connected "$peer" "$port"
+  watch_route true
+}
+
 unload_phonebridge_modules() {
   local assume_yes="$1"
 
@@ -152,7 +336,7 @@ main() {
 
   while (($# > 0)); do
     case "$1" in
-      --check | --listen | --unload)
+      --check | --listen | --route-call | --watch-route | --unload)
         mode="$1"
         shift
         ;;
@@ -161,6 +345,15 @@ main() {
         peer="${2:-}"
         if [[ -z "$peer" ]]; then
           error "--connect-peer requires a host or IP"
+          return 2
+        fi
+        shift 2
+        ;;
+      --serve-peer)
+        mode="--serve-peer"
+        peer="${2:-}"
+        if [[ -z "$peer" ]]; then
+          error "--serve-peer requires a host or IP"
           return 2
         fi
         shift 2
@@ -206,6 +399,15 @@ main() {
       ;;
     --connect-peer)
       connect_peer "$peer" "$port" "$assume_yes"
+      ;;
+    --serve-peer)
+      serve_peer "$peer" "$port"
+      ;;
+    --route-call)
+      route_active_call "$assume_yes"
+      ;;
+    --watch-route)
+      watch_route "$assume_yes"
       ;;
     --unload)
       unload_phonebridge_modules "$assume_yes"

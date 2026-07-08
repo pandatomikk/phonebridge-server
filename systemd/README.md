@@ -1,8 +1,26 @@
 # systemd
 
-This directory is reserved for future PhoneBridge Server unit files.
+This directory contains systemd templates for PhoneBridge Server helpers.
 
-No systemd unit is installed in v0.1. The project must first validate:
+## Current Units
+
+`phonebridge-network-audio.service.in`:
+
+- template for a systemd user service
+- runs `configure-network-audio.sh --serve-peer`
+- ensures the PipeWire/Pulse network tunnel endpoints exist
+- keeps the Bluetooth call-routing watcher active
+- installed by `server/install-network-audio-service.sh`
+
+Install on the Raspberry Pi with:
+
+```bash
+./server/install-network-audio-service.sh --peer <PC_IP_OR_HOSTNAME> --enable --start --status
+```
+
+## Remaining Planned Units
+
+Other units should wait until the project validates:
 
 - the required BlueZ state
 - the required oFono state
